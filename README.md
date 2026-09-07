@@ -1,4 +1,4 @@
-# Alpha
+# Felisa
 
 X（Twitter）風のミニ SNS。**Client / Server 完全分離**構成。本番はさらに **クラウド Gateway / 自宅 Origin** に分離できる（[docs/DEPLOY.md](docs/DEPLOY.md)）。
 

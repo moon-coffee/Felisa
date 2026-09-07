@@ -1,4 +1,4 @@
-# Alpha — 仕様書
+# Felisa — 仕様書
 
 X（Twitter）風のミニ SNS。**Client（フロントエンド）** と **Server（バックエンド）** を完全に分離した構成。
 
