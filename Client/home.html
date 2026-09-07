@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <base href="/">
+    <style>html,body{background:#252525}</style>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900&display=swap">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.css">
+    <link rel="stylesheet" href="home.css">
+    <title>ホーム</title>
+</head>
+<body>
+    <div class="app">
+        <header class="sidebar" data-shell-sidebar></header>
+
+        <main class="feed">
+            <div class="feed-header">
+                <h1>ホーム</h1>
+                <div class="tabs">
+                    <button type="button" class="tab active" data-feed="recommended"><span>おすすめ</span></button>
+                    <button type="button" class="tab" data-feed="following"><span>フォロー中</span></button>
+                </div>
+            </div>
+
+            <button type="button" class="new-posts" id="new-posts" hidden></button>
+
+            <div class="composer" id="composer">
+                <span class="avatar" data-user-avatar aria-hidden="true"><i class="fa-solid fa-user"></i></span>
+                <div class="composer-body">
+                    <textarea class="composer-input" id="composer-text" rows="1"
+                        maxlength="280" placeholder="いまどうしてる？" aria-label="いまどうしてる？"></textarea>
+                    <div class="composer-actions">
+                        <div class="composer-tools"></div>
+                        <button type="button" class="post-btn post-btn--sm" disabled>ポストする</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="feed-list"></div>
+            <div class="feed-end" id="feed-status"></div>
+        </main>
+
+        <aside class="aside" data-shell-aside></aside>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/home.js"></script>
+</body>
+</html>

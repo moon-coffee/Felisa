@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <base href="/">
+    <style>html,body{background:#252525}</style>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900&display=swap">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.css">
+    <link rel="stylesheet" href="home.css">
+    <title>検索</title>
+</head>
+<body>
+    <div class="app">
+        <header class="sidebar" data-shell-sidebar></header>
+
+        <main class="feed">
+            <div class="feed-header feed-header--row">
+                <a href="/home" class="icon-btn" aria-label="戻る"><i class="fa-solid fa-arrow-left"></i></a>
+                <form class="search search--grow" data-search-form>
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="search" id="search-input" placeholder="検索" aria-label="検索">
+                </form>
+            </div>
+
+            <div id="search-list"></div>
+            <div class="feed-end" id="search-status"></div>
+        </main>
+
+        <aside class="aside" data-shell-aside></aside>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/search.js"></script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "name": "Felisa",
+  "version": "0.0.1",
+  "private": true,
+  "description": "SNS",
+  "main": "Server/server.js",
+  "scripts": {
+    "start": "node Server/server.js",
+    "gateway": "node Gateway/server.js",
+    "build": "node build.js",
+    "prod": "npm run build && cross-env NODE_ENV=production node Server/server.js",
+    "prod:gateway": "npm run build && cross-env NODE_ENV=production node Gateway/server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.4.1"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "csso": "^5.0.5",
+    "html-minifier-terser": "^7.2.0",
+    "terser": "^5.36.0"
+  },
+  "overrides": {
+    "body-parser": "1.20.6",
+    "qs": "6.16.0"
+  }
+}

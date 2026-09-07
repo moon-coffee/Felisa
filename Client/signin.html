@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <style>html,body{background:#252525}</style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.css">
+    <link rel="stylesheet" href="style.css">
+    <title>Sign Up</title>
+</head>
+<body>
+    <div class="container" id="container">
+        <div class="form-container create-account">
+            <form class="form" id="RegForm" novalidate>
+                <img src="Images/logo.png" alt="Logo" class="logo">
+                <p>Alpha v0.01</p>
+                <h1>Felisaに登録</h1>
+                <div class="social-icons">
+                    <a href="#" class="icon"><i
+                    class="fa-brands 
+                    fa-google-plus-g"></i></a>
+                    <a href="#" class="icon"><i
+                    class="fa-brands 
+                    fa-facebook-f"></i></a>
+                    <a href="#" class="icon"><i
+                    class="fa-brands 
+                    fa-github"></i></a>
+                    <a href="#" class="icon"><i
+                    class="fa-brands 
+                    fa-linkedin-in"></i></a>
+                </div>
+            <div class="input-group">
+                <input type="text" placeholder="ユーザーID" id="reg-userid" required>
+                <label for="reg-userid">ユーザーID</label>
+                <span class="error-message" id="reg-userid-error"></span>
+            </div>
+            <div class="input-group">
+                <input type="email" placeholder="メールアドレス" id="reg-mail" required>
+                <label for="reg-mail">メールアドレス</label>
+                <span class="error-message" id="reg-mail-error"></span>
+            </div>
+            <div class="input-group">
+                <input type="password" placeholder="パスワード" id="reg-password" required>
+                <label for="reg-password">パスワード</label>
+                <span class="error-message" id="reg-password-error"></span>
+            </div>
+            <button type="submit" id="reg-button">登録</button>
+            <span class="error-message" id="reg-form-message"></span>
+            <p>アカウントをすでにお持ちの場合は、<a href="/login">こちら</a>からログインしてください。</p>
+            <p>このサービスを使用する際は、<a href="https://sute.jp/">sute.jp</a>でメールアドレスを作成して、それを指定することをお勧めします。*普段使用しているメールアドレスを使用しないでください。 *捨てメールアドレスを使用してアカウントにアクセスできなくなった場合の責任は当方は取れません。</p>
+            </form>
+        </div>
+    <script src="js/signin.js"></script>
+</body>
+
+</html>

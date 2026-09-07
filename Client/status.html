@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <base href="/">
+    <style>html,body{background:#252525}</style>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900&display=swap">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.css">
+    <link rel="stylesheet" href="home.css">
+    <title>ポスト</title>
+</head>
+<body>
+    <div class="app">
+        <header class="sidebar" data-shell-sidebar></header>
+
+        <main class="feed">
+            <div class="feed-header feed-header--row">
+                <a href="/home" class="icon-btn" aria-label="戻る"><i class="fa-solid fa-arrow-left"></i></a>
+                <div class="feed-title">ポスト</div>
+            </div>
+
+            <div id="thread-parents"></div>
+            <div id="thread-main"></div>
+
+            <div class="composer composer--reply" id="reply-box" data-reply-to="" hidden>
+                <span class="avatar" data-user-avatar aria-hidden="true"><i class="fa-solid fa-user"></i></span>
+                <div class="composer-body">
+                    <textarea class="composer-input" id="reply-text" rows="1"
+                        maxlength="280" placeholder="返信をポスト" aria-label="返信をポスト"></textarea>
+                    <div class="composer-actions">
+                        <div class="composer-tools"></div>
+                        <button type="button" class="post-btn post-btn--sm" disabled>返信</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="thread-sep">返信</div>
+            <div id="thread-replies"></div>
+            <div class="feed-end" id="thread-status"></div>
+        </main>
+
+        <aside class="aside" data-shell-aside></aside>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/status.js"></script>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <base href="/">
+    <style>html,body{background:#252525}</style>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900&display=swap">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.css">
+    <link rel="stylesheet" href="home.css">
+    <title>設定</title>
+</head>
+<body>
+    <div class="app">
+        <header class="sidebar" data-shell-sidebar></header>
+
+        <main class="feed">
+            <div class="feed-header"><h1>設定</h1></div>
+
+            <section class="settings-sec">
+                <h2>メールアドレスの変更</h2>
+                <p class="settings-note">現在: <span id="cur-email">—</span></p>
+                <form id="email-form" class="settings-form">
+                    <label class="field"><span>新しいメールアドレス</span>
+                        <input type="email" id="email-new" autocomplete="email" required></label>
+                    <label class="field"><span>確認のため現在のパスワード</span>
+                        <input type="password" id="email-pass" autocomplete="current-password" required></label>
+                    <div class="settings-err" id="email-err"></div>
+                    <button type="submit" class="btn btn-solid">メールアドレスを変更</button>
+                </form>
+            </section>
+
+            <section class="settings-sec">
+                <h2>パスワードの変更</h2>
+                <form id="pw-form" class="settings-form">
+                    <label class="field"><span>現在のパスワード</span>
+                        <input type="password" id="pw-cur" autocomplete="current-password" required></label>
+                    <label class="field"><span>新しいパスワード（8文字以上）</span>
+                        <input type="password" id="pw-new" autocomplete="new-password" minlength="8" required></label>
+                    <div class="settings-err" id="pw-err"></div>
+                    <button type="submit" class="btn btn-solid">パスワードを変更</button>
+                </form>
+                <p class="settings-note">変更すると、この端末以外はログアウトされます。</p>
+            </section>
+
+            <section class="settings-sec">
+                <h2>ユーザー名の変更</h2>
+                <form id="uname-form" class="settings-form">
+                    <label class="field"><span>新しいユーザー名（半角英数字・_・3文字以上）</span>
+                        <input type="text" id="uname-new" pattern="[A-Za-z0-9_]+" minlength="3" required></label>
+                    <label class="field"><span>確認のため現在のパスワード</span>
+                        <input type="password" id="uname-pass" autocomplete="current-password" required></label>
+                    <div class="settings-err" id="uname-err"></div>
+                    <button type="submit" class="btn btn-solid" id="uname-btn">ユーザー名を変更</button>
+                </form>
+                <p class="settings-note" id="uname-note">ユーザー名（@ハンドル）の変更は1週間に1回までです。</p>
+            </section>
+
+            <section class="settings-sec">
+                <h2>ログイン中の端末</h2>
+                <div id="sessions"></div>
+                <button type="button" class="btn btn-outline" id="logout-others">他のすべての端末をログアウト</button>
+            </section>
+
+            <section class="settings-sec settings-danger">
+                <h2>アカウントの削除</h2>
+                <p class="settings-note">
+                    アカウントと、投稿・返信・いいね・リポスト・フォロー・通知・ブックマーク・アップロードした画像/動画が
+                    すべて完全に削除されます。この操作は取り消せません。
+                </p>
+                <button type="button" class="btn btn-danger" id="del-open">アカウントの削除を要求する…</button>
+            </section>
+        </main>
+
+        <aside class="aside" data-shell-aside></aside>
+    </div>
+
+    <div class="modal" id="del-modal" hidden>
+        <div class="modal-card">
+            <div class="modal-head">
+                <button type="button" class="icon-btn" id="del-cancel" aria-label="閉じる"><i class="fa-solid fa-xmark"></i></button>
+                <h2>アカウントの削除</h2>
+                <span></span>
+            </div>
+            <p class="modal-msg">確認のため、下の欄に <b>削除</b> と入力し、パスワードを入力してください。</p>
+            <label class="field"><span>「削除」と入力</span><input type="text" id="del-confirm" autocomplete="off"></label>
+            <label class="field"><span>パスワード</span><input type="password" id="del-pass" autocomplete="current-password"></label>
+            <div class="settings-err" id="del-err"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" id="del-cancel2">キャンセル</button>
+                <button type="button" class="btn btn-danger" id="del-go" disabled>完全に削除する</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/settings.js"></script>
+</body>
+</html>

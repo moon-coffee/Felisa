@@ -1,0 +1,4 @@
+node_modules/
+dist/
+Server/data/
+!Server/data/admin.json

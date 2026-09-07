@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <base href="/">
+    <style>html,body{background:#252525}</style>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900&display=swap">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.css">
+    <link rel="stylesheet" href="home.css">
+    <title>プロフィール</title>
+</head>
+<body>
+    <div class="app">
+        <header class="sidebar" data-shell-sidebar></header>
+
+        <main class="feed">
+            <div class="feed-header feed-header--row">
+                <a href="/home" class="icon-btn" aria-label="戻る"><i class="fa-solid fa-arrow-left"></i></a>
+                <div>
+                    <div class="feed-title" data-profile-name>プロフィール</div>
+                    <div class="feed-subtitle" data-profile-count></div>
+                </div>
+            </div>
+
+            <div class="profile-banner" data-profile-banner></div>
+
+            <div class="profile-head">
+                <div class="profile-head-row">
+                    <span class="avatar avatar--xl" data-profile-avatar aria-hidden="true"><i class="fa-solid fa-user"></i></span>
+                    <div class="profile-actions" id="profile-actions"></div>
+                </div>
+                <h1 class="profile-name">
+                    <span data-profile-name>User</span>
+                    <span class="admin-badge" id="profile-admin" hidden>Admin</span>
+                </h1>
+                <p class="profile-handle" data-profile-handle>@user</p>
+                <p class="profile-bio" data-profile-bio hidden></p>
+                <div class="profile-meta">
+                    <a class="profile-link" data-profile-link hidden target="_blank" rel="noopener noreferrer nofollow"></a>
+                    <span class="profile-joined" data-profile-joined></span>
+                </div>
+                <div class="profile-stats">
+                    <span><b data-stat-following>0</b> フォロー中</span>
+                    <span><b data-stat-followers>0</b> フォロワー</span>
+                </div>
+            </div>
+
+            <nav class="tabs" id="profile-tabs">
+                <button type="button" class="tab active" data-tab="posts"><span>ポスト</span></button>
+                <button type="button" class="tab" data-tab="likes"><span>いいね</span></button>
+            </nav>
+
+            <div id="profile-list"></div>
+            <div class="feed-end" id="profile-status"></div>
+        </main>
+
+        <aside class="aside" data-shell-aside></aside>
+    </div>
+
+    <div class="modal" id="edit-modal" hidden>
+        <div class="modal-card">
+            <div class="modal-head">
+                <button type="button" class="icon-btn" id="edit-cancel" aria-label="閉じる"><i class="fa-solid fa-xmark"></i></button>
+                <h2>プロフィールを編集</h2>
+                <button type="button" class="btn btn-solid" id="edit-save">保存</button>
+            </div>
+            <div class="edit-images">
+                <div class="edit-header-preview" id="edit-header-preview" title="タップで拡大">
+                    <div class="edit-avatar-preview" id="edit-avatar-preview" title="タップで拡大"></div>
+                </div>
+                <div class="edit-image-btns">
+                    <button type="button" class="btn btn-outline btn-sm" id="edit-header-btn"><i class="fa-solid fa-image"></i> ヘッダ</button>
+                    <button type="button" class="btn btn-outline btn-sm" id="edit-avatar-btn"><i class="fa-solid fa-user"></i> アイコン</button>
+                </div>
+            </div>
+            <label class="field"><span>表示名</span><input type="text" id="edit-name" maxlength="50"></label>
+            <label class="field"><span>自己紹介</span><textarea id="edit-bio" maxlength="160" rows="3"></textarea></label>
+            <label class="field"><span>リンク (https://…)</span><input type="url" id="edit-link" maxlength="100" placeholder="https://example.com"></label>
+            <input type="file" id="edit-avatar-file" accept="image/*" hidden>
+            <input type="file" id="edit-header-file" accept="image/*" hidden>
+        </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/profile.js"></script>
+</body>
+</html>
