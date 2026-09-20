@@ -1,7 +1,7 @@
 const loginForm = document.getElementById("LoginForm");
-const loginMailOrUserIdInput = document.getElementById("login-mailoruserid");
+const loginUserIdInput = document.getElementById("login-userid");
 const loginPasswordInput = document.getElementById("login-password");
-const loginMailError = document.getElementById("login-mail-error");
+const loginUserIdError = document.getElementById("login-userid-error");
 const loginPasswordError = document.getElementById("login-password-error");
 const loginFormMessage = document.getElementById("login-form-message");
 const loginButton = document.getElementById("login-button");
@@ -9,19 +9,18 @@ const loginButton = document.getElementById("login-button");
 loginForm.addEventListener("submit", async function (event) {
     event.preventDefault();
 
-    loginMailError.textContent = "";
+    loginUserIdError.textContent = "";
     loginPasswordError.textContent = "";
     loginFormMessage.textContent = "";
     loginFormMessage.classList.remove("success");
 
-    const identifier = loginMailOrUserIdInput.value.trim();
-    const password = loginPasswordInput.value.trim();
+    const userId = loginUserIdInput.value.trim();
+    const password = loginPasswordInput.value;
 
     let isValid = true;
 
-    if (identifier === "") {
-        loginMailError.textContent =
-            "メールアドレスまたはユーザーIDを入力してください。";
+    if (userId === "") {
+        loginUserIdError.textContent = "ユーザーIDを入力してください。";
         isValid = false;
     }
 
@@ -40,7 +39,7 @@ loginForm.addEventListener("submit", async function (event) {
         const res = await fetch("/api/login", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ identifier, password }),
+            body: JSON.stringify({ userId, password }),
         });
         const data = await res.json().catch(() => ({}));
 
@@ -52,8 +51,8 @@ loginForm.addEventListener("submit", async function (event) {
         }
 
         const errors = data.errors || {};
-        if (errors.identifier) {
-            loginMailError.textContent = errors.identifier;
+        if (errors.userId) {
+            loginUserIdError.textContent = errors.userId;
         }
         if (errors.password) {
             loginPasswordError.textContent = errors.password;

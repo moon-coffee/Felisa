@@ -117,7 +117,6 @@ function publicProfile(user, viewerId) {
 function selfUser(user) {
     return {
         ...publicProfile(user, user.userId),
-        mail: user.mail,
         usernameNextChangeAt: users.usernameChangeAvailableAt(user.userId),
     };
 }

@@ -1,6 +1,5 @@
 /* 設定 /settings */
 
-const emailErr = document.getElementById("email-err");
 const pwErr = document.getElementById("pw-err");
 const delErr = document.getElementById("del-err");
 const sessionsEl = document.getElementById("sessions");
@@ -10,23 +9,6 @@ function showErrors(box, errors) {
         ? Object.values(errors).join(" ")
         : "";
 }
-
-/* ---- メールアドレス変更 ---- */
-document.getElementById("email-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    showErrors(emailErr, null);
-    const res = await SNS.api("PUT", "/api/me/email", {
-        email: document.getElementById("email-new").value.trim(),
-        password: document.getElementById("email-pass").value,
-    });
-    if (res.data.ok) {
-        document.getElementById("cur-email").textContent = res.data.user.mail;
-        document.getElementById("email-form").reset();
-        SNS.notify("メールアドレスを変更しました");
-    } else {
-        showErrors(emailErr, res.data.errors);
-    }
-});
 
 /* ---- パスワード変更 ---- */
 document.getElementById("pw-form").addEventListener("submit", async (e) => {
@@ -183,7 +165,6 @@ delGo.addEventListener("click", async () => {
 /* ---- 初期化 ---- */
 SNS.mountShell("settings").then((me) => {
     if (me) {
-        document.getElementById("cur-email").textContent = me.mail || "—";
         applyUnameLock(me.usernameNextChangeAt);
     }
 });

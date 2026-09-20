@@ -11,7 +11,7 @@ function ensureDir(dir) {
 function writeFileAtomic(file, content) {
     ensureDir(path.dirname(file));
     const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
-    fs.writeFileSync(tmp, content, "utf8");
+    fs.writeFileSync(tmp, content, { encoding: "utf8", mode: 0o600 }); // 他ユーザーから読めないように
     fs.renameSync(tmp, file);
 }
 

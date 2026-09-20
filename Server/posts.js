@@ -84,7 +84,15 @@ router.post("/", (req, res) => {
     // メディアの検証（サーバーが払い出した ID のみ許可）
     const media = [];
     for (const m of mediaInput.slice(0, 4)) {
-        if (m && typeof m.id === "string" && mediaStore.exists(m.id)) {
+        // 他人（または別投稿）に添付済みのメディアは再利用させない
+        // （自分の投稿を削除して他人の画像ファイルまで消せてしまうのを防ぐ）
+        if (
+            m &&
+            typeof m.id === "string" &&
+            mediaStore.exists(m.id) &&
+            !postStore.mediaInUse(m.id) &&
+            !media.some((x) => x.id === m.id)
+        ) {
             const type = m.id.endsWith(".mp4") ? "video" : "image";
             media.push({
                 type,
@@ -219,6 +227,13 @@ function toggleHandler(kind, on) {
                 .json({ ok: false, errors: { form: "投稿が見つかりません。" } });
         }
 
+        // ブロック関係にある相手の投稿へは通知を発生させる操作をさせない
+        if (kind !== "bookmark" && blocks.between(user.userId, post.userId)) {
+            return res
+                .status(403)
+                .json({ ok: false, errors: { form: "この投稿には操作できません。" } });
+        }
+
         if (kind === "like") {
             const result = postStore.setLike(post.id, user.userId, on);
             if (on)
@@ -264,6 +279,11 @@ router.post("/:id/vote", (req, res) => {
         return res
             .status(404)
             .json({ ok: false, errors: { form: "投票が見つかりません。" } });
+    }
+    if (blocks.between(user.userId, post.userId)) {
+        return res
+            .status(403)
+            .json({ ok: false, errors: { form: "この投稿には操作できません。" } });
     }
     const result = postStore.vote(
         post.id,

@@ -21,8 +21,9 @@ const PORT = process.env.PORT || 80;
 const HOST = process.env.HOST || "127.0.0.1";
 const isProd = process.env.NODE_ENV === "production";
 
-const ORIGIN_URL = process.env.ORIGIN_URL || "http://felisa.f5.si";
-const GATEWAY_SECRET = process.env.GATEWAY_SECRET || "secret";
+// 既定値は置かない（推測可能な既定シークレットや、意図しない転送先を防ぐ）。
+const ORIGIN_URL = process.env.ORIGIN_URL || "";
+const GATEWAY_SECRET = process.env.GATEWAY_SECRET || "";
 
 if (!ORIGIN_URL) {
     console.error(
@@ -55,6 +56,10 @@ if (isProd && STATIC_DIR === CLIENT_DIR) {
 }
 
 /* ---------- 静的資産（実ファイルのみ・HTML シェルは含めない） ---------- */
+app.use((req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    next();
+});
 app.use("/js", express.static(path.join(STATIC_DIR, "js")));
 app.use("/Images", express.static(path.join(STATIC_DIR, "Images")));
 app.get("/style.css", (req, res) => res.sendFile(path.join(STATIC_DIR, "style.css")));

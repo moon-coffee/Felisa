@@ -92,6 +92,11 @@ function create({ userId, text, replyTo = null, media = [], poll = null }) {
     return post;
 }
 
+// 既にいずれかの投稿に添付されているメディアか
+function mediaInUse(id) {
+    return readPosts().some((p) => p.media.some((m) => m && m.id === id));
+}
+
 function collectMediaIds(posts) {
     const ids = [];
     for (const p of posts) {
@@ -116,8 +121,12 @@ function remove(id) {
         }
     }
     const gone = posts.filter((p) => removed.has(p.id));
-    writePosts(posts.filter((p) => !removed.has(p.id)));
-    return { removed: [...removed], mediaIds: collectMediaIds(gone) };
+    const kept = posts.filter((p) => !removed.has(p.id));
+    writePosts(kept);
+    // 他の投稿がまだ参照しているメディアは消さない
+    const stillUsed = new Set(collectMediaIds(kept));
+    const mediaIds = collectMediaIds(gone).filter((m) => !stillUsed.has(m));
+    return { removed: [...removed], mediaIds };
 }
 
 function listTimeline({ limit = 50, since = 0, hidden = null } = {}) {
@@ -227,7 +236,7 @@ function vote(id, userId, optionIndex) {
     if (!post || !post.poll) return { error: "投票が見つかりません。" };
     if (Date.now() >= post.poll.endsAt) return { error: "この投票は終了しました。" };
     const key = String(userId).toLowerCase();
-    if (post.poll.votes[key] !== undefined)
+    if (Object.prototype.hasOwnProperty.call(post.poll.votes, key))
         return { error: "すでに投票済みです。" };
     const idx = parseInt(optionIndex, 10);
     if (!(idx >= 0 && idx < post.poll.options.length))
@@ -340,6 +349,7 @@ function trends(limit = 10) {
 module.exports = {
     TEXT_MAX,
     get,
+    mediaInUse,
     create,
     remove,
     listTimeline,

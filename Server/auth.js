@@ -15,8 +15,36 @@ const present = require("./present");
 
 const router = express.Router();
 
-const MAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const USERID_RE = /^[A-Za-z0-9_]+$/;
+const PASSWORD_MIN = 8;
+const PASSWORD_MAX = 128; // scrypt に巨大な入力を渡させない
+
+// ログイン失敗の連続を口座（ユーザーID）単位で数え、分散ブルートフォースを抑える。
+// IP 単位のレート制限（server.js）を補完するもの。
+const LOGIN_FAIL_LIMIT = 10;
+const LOGIN_FAIL_WINDOW_MS = 15 * 60 * 1000;
+const loginFails = new Map(); // lower(userId) -> { count, first }
+
+function loginLocked(key) {
+    const f = loginFails.get(key);
+    if (!f) return false;
+    if (Date.now() - f.first > LOGIN_FAIL_WINDOW_MS) {
+        loginFails.delete(key);
+        return false;
+    }
+    return f.count >= LOGIN_FAIL_LIMIT;
+}
+function recordLoginFail(key) {
+    const now = Date.now();
+    const f = loginFails.get(key);
+    if (!f || now - f.first > LOGIN_FAIL_WINDOW_MS) loginFails.set(key, { count: 1, first: now });
+    else f.count += 1;
+    if (loginFails.size > 10000) {
+        for (const [k, v] of loginFails) {
+            if (now - v.first > LOGIN_FAIL_WINDOW_MS) loginFails.delete(k);
+        }
+    }
+}
 
 const asString = (v) => (typeof v === "string" ? v : "");
 
@@ -39,34 +67,35 @@ function findTarget(req) {
 router.post("/register", (req, res) => {
     const body = req.body || {};
     const userId = asString(body.userId).trim();
-    const mail = asString(body.mail).trim();
     const password = asString(body.password);
 
     const errors = {};
     if (userId === "") errors.userId = "ユーザーIDを入力してください。";
     else if (userId.length < 3)
         errors.userId = "ユーザーIDは3文字以上で入力してください。";
+    else if (userId.length > store.USERID_MAX)
+        errors.userId = `ユーザーIDは${store.USERID_MAX}文字以内で入力してください。`;
     else if (!USERID_RE.test(userId))
         errors.userId = "ユーザーIDは半角英数字とアンダースコアのみ使用できます。";
-    if (mail === "") errors.mail = "メールアドレスを入力してください。";
-    else if (!MAIL_RE.test(mail)) errors.mail = "メールアドレスの形式が正しくありません。";
+    else if (store.isReservedId(userId))
+        errors.userId = "このユーザーIDは使用できません。";
     if (password === "") errors.password = "パスワードを入力してください。";
-    else if (password.length < 8)
-        errors.password = "パスワードは8文字以上で入力してください。";
+    else if (password.length < PASSWORD_MIN)
+        errors.password = `パスワードは${PASSWORD_MIN}文字以上で入力してください。`;
+    else if (password.length > PASSWORD_MAX)
+        errors.password = `パスワードは${PASSWORD_MAX}文字以内で入力してください。`;
 
     if (Object.keys(errors).length > 0) {
         return res.status(400).json({ ok: false, errors });
     }
-    // ユーザーID・メールのどちらが衝突したかを区別しない
-    // （メールアドレスの登録有無が第三者に判別できてしまうのを防ぐため）
-    if (store.findByUserId(userId) || store.findByMail(mail)) {
+    if (store.findByUserId(userId)) {
         return res.status(409).json({
             ok: false,
-            errors: { form: "このユーザーIDまたはメールアドレスは既に使用されています。" },
+            errors: { userId: "このユーザーIDは既に使用されています。" },
         });
     }
 
-    const user = store.createUser({ userId, mail, password });
+    const user = store.createUser({ userId, password });
     avatar.createForUser(user.userId);
     session.issue(res, user.userId, req);
     return res.status(201).json({ ok: true, user: present.selfUser(user) });
@@ -74,27 +103,34 @@ router.post("/register", (req, res) => {
 
 router.post("/login", (req, res) => {
     const body = req.body || {};
-    const identifier = asString(body.identifier).trim();
+    const userId = asString(body.userId).trim();
     const password = asString(body.password);
 
     const errors = {};
-    if (identifier === "")
-        errors.identifier = "メールアドレスまたはユーザーIDを入力してください。";
+    if (userId === "") errors.userId = "ユーザーIDを入力してください。";
     if (password === "") errors.password = "パスワードを入力してください。";
     if (Object.keys(errors).length > 0) {
         return res.status(400).json({ ok: false, errors });
     }
 
-    const user = store.findByIdentifier(identifier);
-    if (!user || !store.verifyPassword(password, user.password)) {
-        return res.status(401).json({
+    const key = userId.toLowerCase();
+    if (loginLocked(key)) {
+        return res.status(429).json({
             ok: false,
-            errors: {
-                form: "メールアドレス（またはユーザーID）かパスワードが正しくありません。",
-            },
+            errors: { form: "ログインの失敗が続いたため、しばらく待ってから再度お試しください。" },
         });
     }
 
+    const user = password.length <= PASSWORD_MAX ? store.findByUserId(userId) : null;
+    if (!store.verifyPasswordOrDummy(password, user)) {
+        recordLoginFail(key);
+        return res.status(401).json({
+            ok: false,
+            errors: { form: "ユーザーIDかパスワードが正しくありません。" },
+        });
+    }
+
+    loginFails.delete(key);
     session.issue(res, user.userId, req);
     return res.json({ ok: true, user: present.selfUser(user) });
 });
@@ -134,34 +170,6 @@ router.put("/me", (req, res) => {
     return res.json({ ok: true, user: present.selfUser(updated) });
 });
 
-router.put("/me/email", (req, res) => {
-    const user = requireAuth(req, res);
-    if (!user) return;
-    const body = req.body || {};
-    const email = asString(body.email).trim();
-    const password = asString(body.password);
-
-    if (!store.verifyPassword(password, user.password)) {
-        return res
-            .status(403)
-            .json({ ok: false, errors: { password: "パスワードが正しくありません。" } });
-    }
-    if (!MAIL_RE.test(email)) {
-        return res
-            .status(400)
-            .json({ ok: false, errors: { email: "メールアドレスの形式が正しくありません。" } });
-    }
-    const existing = store.findByMail(email);
-    if (existing && existing.userId.toLowerCase() !== user.userId.toLowerCase()) {
-        return res.status(409).json({
-            ok: false,
-            errors: { email: "このメールアドレスは既に使用されています。" },
-        });
-    }
-    const updated = store.setMail(user.userId, email);
-    return res.json({ ok: true, user: present.selfUser(updated) });
-});
-
 router.put("/me/password", (req, res) => {
     const user = requireAuth(req, res);
     if (!user) return;
@@ -175,10 +183,12 @@ router.put("/me/password", (req, res) => {
             errors: { currentPassword: "現在のパスワードが正しくありません。" },
         });
     }
-    if (next.length < 8) {
+    if (next.length < PASSWORD_MIN || next.length > PASSWORD_MAX) {
         return res.status(400).json({
             ok: false,
-            errors: { newPassword: "新しいパスワードは8文字以上で入力してください。" },
+            errors: {
+                newPassword: `新しいパスワードは${PASSWORD_MIN}〜${PASSWORD_MAX}文字で入力してください。`,
+            },
         });
     }
     if (next === current) {

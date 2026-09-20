@@ -19,6 +19,18 @@ const videoLimiter = rateLimit({
     },
 });
 
+// 画像アップロードはディスクを消費するため、全体制限とは別に上限を設ける
+const imageLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000,
+    limit: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        ok: false,
+        errors: { form: "画像のアップロードが多すぎます。しばらく待ってから再度お試しください。" },
+    },
+});
+
 const MAX_CONCURRENT_TRANSCODES = 2;
 let activeTranscodes = 0;
 
@@ -33,7 +45,7 @@ function requireAuth(req, res) {
 }
 
 // クライアントが canvas で PNG 化した画像を受け取る（body は express.raw で Buffer）
-router.post("/image", (req, res) => {
+router.post("/image", imageLimiter, (req, res) => {
     if (!requireAuth(req, res)) return;
     const result = mediaStore.saveImagePng(req.body);
     if (result.error) {

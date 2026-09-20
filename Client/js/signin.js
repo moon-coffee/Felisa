@@ -1,9 +1,7 @@
 const regForm = document.getElementById("RegForm");
 const regUserIdInput = document.getElementById("reg-userid");
-const regMailInput = document.getElementById("reg-mail");
 const regPasswordInput = document.getElementById("reg-password");
 const regUserIdError = document.getElementById("reg-userid-error");
-const regMailError = document.getElementById("reg-mail-error");
 const regPasswordError = document.getElementById("reg-password-error");
 const regFormMessage = document.getElementById("reg-form-message");
 const regButton = document.getElementById("reg-button");
@@ -12,24 +10,17 @@ regForm.addEventListener("submit", async function (event) {
     event.preventDefault();
 
     regUserIdError.textContent = "";
-    regMailError.textContent = "";
     regPasswordError.textContent = "";
     regFormMessage.textContent = "";
     regFormMessage.classList.remove("success");
 
     const userId = regUserIdInput.value.trim();
-    const mail = regMailInput.value.trim();
-    const password = regPasswordInput.value.trim();
+    const password = regPasswordInput.value;
 
     let isValid = true;
 
     if (userId === "") {
         regUserIdError.textContent = "ユーザーIDを入力してください。";
-        isValid = false;
-    }
-
-    if (mail === "") {
-        regMailError.textContent = "メールアドレスを入力してください。";
         isValid = false;
     }
 
@@ -48,7 +39,7 @@ regForm.addEventListener("submit", async function (event) {
         const res = await fetch("/api/register", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId, mail, password }),
+            body: JSON.stringify({ userId, password }),
         });
         const data = await res.json().catch(() => ({}));
 
@@ -65,9 +56,6 @@ regForm.addEventListener("submit", async function (event) {
         const errors = data.errors || {};
         if (errors.userId) {
             regUserIdError.textContent = errors.userId;
-        }
-        if (errors.mail) {
-            regMailError.textContent = errors.mail;
         }
         if (errors.password) {
             regPasswordError.textContent = errors.password;

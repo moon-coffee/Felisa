@@ -31,24 +31,19 @@
                     fa-linkedin-in"></i></a>
                 </div>
             <div class="input-group">
-                <input type="text" placeholder="ユーザーID" id="reg-userid" required>
+                <input type="text" placeholder="ユーザーID" id="reg-userid" autocomplete="username" required>
                 <label for="reg-userid">ユーザーID</label>
                 <span class="error-message" id="reg-userid-error"></span>
             </div>
             <div class="input-group">
-                <input type="email" placeholder="メールアドレス" id="reg-mail" required>
-                <label for="reg-mail">メールアドレス</label>
-                <span class="error-message" id="reg-mail-error"></span>
-            </div>
-            <div class="input-group">
-                <input type="password" placeholder="パスワード" id="reg-password" required>
+                <input type="password" placeholder="パスワード" id="reg-password" autocomplete="new-password" required>
                 <label for="reg-password">パスワード</label>
                 <span class="error-message" id="reg-password-error"></span>
             </div>
             <button type="submit" id="reg-button">登録</button>
             <span class="error-message" id="reg-form-message"></span>
             <p>アカウントをすでにお持ちの場合は、<a href="/login">こちら</a>からログインしてください。</p>
-            <p>このサービスを使用する際は、<a href="https://sute.jp/">sute.jp</a>でメールアドレスを作成して、それを指定することをお勧めします。*普段使用しているメールアドレスを使用しないでください。 *捨てメールアドレスを使用してアカウントにアクセスできなくなった場合の責任は当方は取れません。</p>
+            <p>メールアドレスは不要です。パスワードを忘れるとアカウントに再度ログインできなくなるため、必ず控えておいてください。</p>
             </form>
         </div>
     <script src="js/signin.js"></script>

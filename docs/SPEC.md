@@ -65,7 +65,7 @@ Web/
 読み込み時に旧レコードへ欠損フィールドを補完する。
 
 ### users.json
-`userId`（一意 / `^[A-Za-z0-9_]+$` / 3文字以上）, `mail`（一意）, `password`（`scrypt` の `salt:hash`）, `createdAt`（ISO）, `displayName`（≤50）, `bio`（≤160）, `link`（`^https?://…` のみ保存 / ≤100）, `hasHeader`（bool）
+`userId`（一意 / `^[A-Za-z0-9_]+$` / 3〜30文字 / 予約名不可）, `password`（`scrypt` の `salt:hash`）, `createdAt`（ISO）, `displayName`（≤50）, `bio`（≤160）, `link`（`^https?://…` のみ保存 / ≤100）, `hasHeader`（bool）
 
 ### posts.json
 `id`(UUID), `userId`, `text`(≤280), `createdAt`(ms), `replyTo`(id|null),
@@ -139,12 +139,11 @@ Web/
 ### 認証・アカウント
 | M・パス | ボディ | 備考 |
 |---|---|---|
-| `POST /api/register` | `{userId,mail,password}` | `201`、Cookie 発行（自動ログイン） |
-| `POST /api/login` | `{identifier,password}` | |
+| `POST /api/register` | `{userId,password}` | `201`、Cookie 発行（自動ログイン）。パスワードは8〜128文字。メールアドレスは扱わない |
+| `POST /api/login` | `{userId,password}` | 同一ユーザーIDで10回失敗すると15分間 `429`。存在しないIDでも scrypt を1回実行して応答時間を揃える |
 | `POST /api/logout` | — | 現在のセッションを失効 |
 | `GET /api/me` | — | `{ok,user,unreadNotifications}` |
 | `PUT /api/me` | `{displayName?,bio?,link?}` | |
-| `PUT /api/me/email` | `{email,password}` | パスワード再確認・重複チェック |
 | `PUT /api/me/password` | `{currentPassword,newPassword}` | 他端末を失効 |
 | `PUT /api/me/username` | `{userId,password}` | **ユーザー名（@ハンドル）の変更。1週間に1回まで**。成功時に投稿・いいね・リポスト・投票・フォロー・ブロック・ブックマーク・通知・セッション・アイコン/ヘッダ・`admin.json` の該当 ID を新 ID へ一括更新。ロック中は `429` ＋ `availableAt` |
 | `DELETE /api/me` | `{password}` | **アカウント削除**。投稿・メディア・いいね・リポスト・投票・フォロー・ブロック・ブックマーク・通知・アイコン/ヘッダ・全セッションをカスケード削除 |
@@ -207,7 +206,7 @@ Web/
 - **検索 `/search`** — キーワード / `#タグ`。クエリ未指定時はトレンドを表示。
 - **通知 `/notifications`** — 一覧。開くと既読化しバッジ解消。
 - **ブックマーク `/bookmarks`** — ブックマークした投稿一覧。
-- **設定 `/settings`** — メール変更 / パスワード変更 / **ユーザー名変更（週1・ロック中は次回可能時刻を表示）** / ログイン端末一覧（IP・端末要約・**生 User-Agent**・最終アクセス・個別/一括ログアウト）/ アカウント削除（「削除」入力＋パスワードの確認モーダル）。
+- **設定 `/settings`** — パスワード変更 / **ユーザー名変更（週1・ロック中は次回可能時刻を表示）** / ログイン端末一覧（IP・端末要約・**生 User-Agent**・最終アクセス・個別/一括ログアウト）/ アカウント削除（「削除」入力＋パスワードの確認モーダル）。
 - 削除・ブロック等の確認は **すべて画面内のモーダル / トースト**（`window.alert` / `confirm` は不使用）。
 - **画像はライトボックスでプレビュー**：投稿画像・プロフィールのアイコン/ヘッダ・投稿前の添付画像・API 経由の画像（`/api/media` `/api/avatar` `/api/header`）はクリックで**画面手前にオーバーレイ表示**（別タブへ遷移しない、Esc / 背景クリックで閉じる）。プロフィール編集はアイコン/ヘッダを**保存前にプレビュー**し、「保存」で確定。
 - サイドバー・右カラム・トレンドは `common.js` が各ページへ注入する。
@@ -217,18 +216,18 @@ Web/
 ## 8. セキュリティ / 運用
 
 - **CSP**: `default-src 'self'` を基本に、スタイルとフォントのみ Google Fonts / cdnjs を許可。`script-src 'self'`（インラインスクリプトなし）、`img-src 'self' data: blob:`、`media-src 'self' blob:`、`frame-ancestors 'none'`、`base-uri 'self'`、`form-action 'self'`。
-- **レート制限**: 全 `/api` は 1IP 毎分500。`login` / `register` / `me/password` / `me/email` は毎分20。
+- **レート制限**: 全 `/api` は 1IP 毎分500。`login` / `register` / `me/password` / `me/username` / `DELETE me` は毎分20。画像アップロードは10分に60回/IP。未ログインのアップロード系リクエストは、ボディを読む前に `401` で拒否。
 - **CSRF 多層防御**: `SameSite=Lax` Cookie ＋ `Sec-Fetch-Site: cross-site` の書き込みを拒否 ＋ JSON/`image/png` の Content-Type 要求（クロスサイトからは preflight が必要で送れない）。
-- **アップロード**: 生バイトは経路ごとにサイズ上限（画像9MB / 動画85MB）。PNG はシグネチャ・IHDR 寸法・サイズを検証（デコードしない）。動画は ffmpeg を引数配列で spawn し `-map_metadata -1`、タイムアウトあり。保存ファイル名はサーバー生成。配信は `uuid.(png|mp4)` 限定＋実パス確認でトラバーサル防止。動画変換は専用レート制限（15分に6回/IP）＋同時実行数の上限（既定2）で CPU 枯渇を防止。
+- **アップロード**: 生バイトは経路ごとにサイズ上限（画像9MB / 動画85MB）。PNG はシグネチャ・IHDR 寸法・サイズを検証（デコードしない）。動画はコンテナのマジックバイト（MP4/MOV・WebM/MKV）を検証したうえで ffmpeg を引数配列で spawn し、`-protocol_whitelist file` で外部参照を禁止、`-map_metadata -1`、タイムアウトあり。他の投稿に添付済みのメディアは再利用不可（削除時に他人のファイルを消せないように）。保存ファイル名はサーバー生成。配信は `uuid.(png|mp4)` 限定＋実パス確認でトラバーサル防止。動画変換は専用レート制限（15分に6回/IP）＋同時実行数の上限（既定2）で CPU 枯渇を防止。
 - **セッション**: Cookie にはランダムトークンのみ、DB は sha256 のみ保持。失効機構あり。不正な `%` エンコーディングを含む Cookie は例外を投げず無視する。
-- **秘匿**: `X-Powered-By` 無効、`X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy: no-referrer`、`Cross-Origin-Resource-Policy: same-origin`。エラー時はスタックトレースを返さずログのみ。公開プロフィール・投稿・通知にメールを含めない。端末一覧の IP/UA は本人にのみ。
+- **秘匿**: `X-Powered-By` 無効、`X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy: no-referrer`、`Cross-Origin-Resource-Policy: same-origin`。エラー時はスタックトレースを返さずログのみ。メールアドレスは収集・保存しない（旧データの `mail` は起動時に削除）。API 応答は `Cache-Control: no-store`、本番は HSTS を付与。端末一覧の IP/UA は本人にのみ。
 - **入力**: JSON ボディ ≤32KB。本文280 / 表示名50 / bio160 / link100、userId は英数字と `_`。ハッシュタグは `\p{L}\p{N}_` のみ（`<>"` 等を含めない）。
 - **本番**: `NODE_ENV=production` かつ `dist/` があれば minify 済みを配信。`npm run prod` で `build` → 起動。Node は本番では既定で `127.0.0.1`（ループバック）のみ待受け、リバースプロキシ経由のみを前提とする（`trust proxy` は1ホップのみ信頼。Node に直接到達できると `X-Forwarded-For` 偽装でレート制限を回避されるため）。**クラウド Gateway + 自宅 Origin 構成**（`GATEWAY_SECRET` 設定時）では、共有シークレットを持たないリクエストを Origin 側で `403` 拒否したうえで、Gateway が計算済みの実クライアントIP（`X-Origin-Client-Ip`）を `X-Forwarded-For` に採用し直すことで、なりすまし不可能な形で1ホップ信頼を維持する。手順は [DEPLOY.md](DEPLOY.md)。
 
 ### 既知の制限
 - データストアは JSON ファイル。書き込みは一時ファイル+rename で原子的だが、プロセスを跨いだロックは無い。**単一 Node プロセスでの運用を前提**とし、クラスタモードや複数インスタンスへの水平分散はしない（[DEPLOY.md](DEPLOY.md) 参照）。
 - リポストのタイムライン展開は「フォロー中」フィードとプロフィールのみ。
-- 登録・メールアドレス変更にメール確認（本人所有性の検証）は無い。
+- メールアドレスを持たないため、パスワード再設定の手段は無い（忘れるとログイン不可）。
 - DM・引用リポスト・画像の alt・トレンドの地域別集計・通知の粒度設定は未実装。
 
 ---

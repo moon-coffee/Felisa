@@ -49,7 +49,7 @@ function saveImagePng(buf) {
         return { error: "画像データが空です。" };
     }
     if (buf.length > IMAGE_MAX_BYTES) {
-        return { error: "画像サイズが大きすぎます（3MB まで）。" };
+        return { error: "画像サイズが大きすぎます（8MB まで）。" };
     }
     const info = pngUtil.inspect(buf);
     if (!info) {
@@ -59,6 +59,15 @@ function saveImagePng(buf) {
     const id = crypto.randomUUID() + ".png";
     fs.writeFileSync(path.join(MEDIA_DIR, id), buf);
     return { media: { type: "image", id, width: info.width, height: info.height } };
+}
+
+// コンテナのマジックバイト検証（MP4/MOV 系の ftyp、WebM/Matroska の EBML のみ許可）。
+// ffmpeg は HLS/concat プレイリスト等も自動判別し、ローカルファイル読み出しや外部通信に
+// 悪用され得るため、想定外の形式は変換前に拒否する。
+function looksLikeVideo(buf) {
+    if (buf.length < 12) return false;
+    if (buf.toString("latin1", 4, 8) === "ftyp") return true;
+    return buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3;
 }
 
 // 動画を MP4 / 480p 上限 / メタデータ削除で再エンコードして保存
@@ -77,6 +86,10 @@ function saveVideo(buf) {
             return resolvePromise({ error: "動画サイズが大きすぎます（80MB まで）。" });
         }
 
+        if (!looksLikeVideo(buf)) {
+            return resolvePromise({ error: "対応していない動画形式です。" });
+        }
+
         ensureDir();
         const inPath = path.join(
             os.tmpdir(),
@@ -84,10 +97,13 @@ function saveVideo(buf) {
         );
         const id = crypto.randomUUID() + ".mp4";
         const outPath = path.join(MEDIA_DIR, id);
-        fs.writeFileSync(inPath, buf);
+        fs.writeFileSync(inPath, buf, { mode: 0o600 });
 
         const args = [
             "-y",
+            "-nostdin",
+            "-protocol_whitelist",
+            "file", // 入力ファイル以外（http/tcp 等）への参照を禁止
             "-i",
             inPath,
             "-t",

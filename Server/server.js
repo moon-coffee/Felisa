@@ -21,7 +21,7 @@ const isProd = process.env.NODE_ENV === "production";
 const HOST = process.env.HOST || (isProd ? "127.0.0.1" : undefined);
 // クラウド側 Gateway（Cloudflare Tunnel の先）から届いたリクエストだけを信頼するための共有秘密。
 // 未設定なら旧来どおり（Caddy 等のリバースプロキシに直接ぶら下げる単体構成）として振る舞う。
-const GATEWAY_SECRET = process.env.GATEWAY_SECRET || "secret";
+const GATEWAY_SECRET = process.env.GATEWAY_SECRET || "";
 
 const CLIENT_DIR = path.join(__dirname, "..", "Client");
 const DIST_DIR = path.join(__dirname, "..", "dist");
@@ -72,6 +72,7 @@ const CSP = [
     "img-src 'self' data: blob:",
     "media-src 'self' blob:",
     "connect-src 'self'",
+    "object-src 'none'",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -83,6 +84,13 @@ app.use((req, res, next) => {
     res.setHeader("X-Frame-Options", "DENY");
     res.setHeader("Referrer-Policy", "no-referrer");
     res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+    if (isProd) {
+        res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    }
+    // API 応答（個人情報・セッション一覧など）を中間キャッシュ／ブラウザに残さない。
+    // 画像配信など個別に Cache-Control を設定するルートはそちらが優先される。
+    if (req.path.startsWith("/api/")) res.setHeader("Cache-Control", "no-store");
     next();
 });
 
@@ -100,7 +108,19 @@ app.use("/api", (req, res, next) => {
 });
 
 /* ---------- ボディパーサ ---------- */
-// 画像・動画は生バイトで受け取る（パスごとに先に登録）
+// 画像・動画は生バイトで受け取る（パスごとに先に登録）。
+// 最大85MBをメモリに溜めるため、未ログインの要求はパースの前に弾く。
+const requireSession = (req, res, next) => {
+    if (["POST", "PUT"].includes(req.method) && !session.currentUserId(req)) {
+        return res
+            .status(401)
+            .json({ ok: false, errors: { form: "ログインが必要です。" } });
+    }
+    next();
+};
+for (const p of ["/api/media/image", "/api/media/video", "/api/me/avatar", "/api/me/header"]) {
+    app.use(p, requireSession);
+}
 app.use("/api/media/image", express.raw({ type: "image/png", limit: "9mb" }));
 app.use(
     "/api/media/video",
@@ -136,11 +156,12 @@ for (const p of [
     "/api/login",
     "/api/register",
     "/api/me/password",
-    "/api/me/email",
     "/api/me/username",
 ]) {
     app.use(p, authLimiter);
 }
+// アカウント削除もパスワード再確認を伴うため、総当たり対策として同じ制限を掛ける
+app.delete("/api/me", authLimiter);
 
 /* ---------- API ---------- */
 app.get("/api/capabilities", (req, res) => {

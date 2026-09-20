@@ -9,6 +9,7 @@ const DISPLAY_NAME_MAX = 50;
 const BIO_MAX = 160;
 const LINK_MAX = 100;
 const USERID_RE = /^[A-Za-z0-9_]+$/;
+const USERID_MAX = 30;
 const USERID_CHANGE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 1週間
 
 function normalize(u) {
@@ -18,7 +19,6 @@ function normalize(u) {
             : u.userId;
     return {
         userId: u.userId,
-        mail: u.mail,
         password: u.password,
         createdAt: u.createdAt || null,
         displayName,
@@ -32,6 +32,14 @@ function normalize(u) {
 function readUsers() {
     return readArray(USERS_FILE).map(normalize);
 }
+
+// ルーティング・Object プロトタイプと衝突するため、ユーザーIDとして使えない名前
+const RESERVED_IDS = new Set([
+    "api", "js", "images", "status", "search", "settings", "bookmarks",
+    "notifications", "login", "signin", "home", "media", "favicon.ico",
+    "__proto__", "constructor", "prototype", "hasownproperty", "tostring", "valueof",
+]);
+const isReservedId = (id) => RESERVED_IDS.has(String(id).toLowerCase());
 
 function writeUsers(users) {
     writeArray(USERS_FILE, users);
@@ -52,26 +60,29 @@ function verifyPassword(password, stored) {
     return crypto.timingSafeEqual(storedBuf, derived);
 }
 
+// メールアドレス機能の廃止に伴い、既存データに残った mail を起動時に消去する
+(function purgeLegacyMail() {
+    const raw = readArray(USERS_FILE);
+    if (raw.some((u) => u && "mail" in u)) writeUsers(raw.map(normalize));
+})();
+
+// 存在しないユーザーへのログインでも scrypt を1回実行し、応答時間でユーザーの有無を判別させない
+const DUMMY_HASH = hashPassword(crypto.randomBytes(16).toString("hex"));
+function verifyPasswordOrDummy(password, user) {
+    const ok = verifyPassword(password, user ? user.password : DUMMY_HASH);
+    return !!user && ok;
+}
+
 const lc = (v) => String(v).toLowerCase();
 
 function findByUserId(userId) {
     return readUsers().find((u) => lc(u.userId) === lc(userId));
 }
-function findByMail(mail) {
-    return readUsers().find((u) => lc(u.mail) === lc(mail));
-}
-function findByIdentifier(identifier) {
-    const key = lc(identifier);
-    return readUsers().find(
-        (u) => lc(u.userId) === key || lc(u.mail) === key
-    );
-}
 
-function createUser({ userId, mail, password }) {
+function createUser({ userId, password }) {
     const users = readUsers();
     const user = {
         userId,
-        mail,
         password: hashPassword(password),
         createdAt: new Date().toISOString(),
         displayName: userId,
@@ -110,12 +121,6 @@ function updateProfile(userId, patch) {
     });
 }
 
-function setMail(userId, mail) {
-    return mutate(userId, (u) => {
-        u.mail = mail;
-    });
-}
-
 function setPassword(userId, newPassword) {
     return mutate(userId, (u) => {
         u.password = hashPassword(newPassword);
@@ -146,8 +151,13 @@ function usernameChangeAvailableAt(userId) {
 // { user } または { error } を返す
 function renameUser(oldId, newId) {
     const trimmed = String(newId).trim();
-    if (!USERID_RE.test(trimmed) || trimmed.length < 3) {
-        return { error: "ユーザー名は半角英数字とアンダースコア・3文字以上です。" };
+    if (!USERID_RE.test(trimmed) || trimmed.length < 3 || trimmed.length > USERID_MAX) {
+        return {
+            error: `ユーザー名は半角英数字とアンダースコア・3〜${USERID_MAX}文字です。`,
+        };
+    }
+    if (isReservedId(trimmed)) {
+        return { error: "このユーザー名は使用できません。" };
     }
     const users = readUsers();
     const idx = users.findIndex((u) => lc(u.userId) === lc(oldId));
@@ -173,18 +183,18 @@ function renameUser(oldId, newId) {
 
 module.exports = {
     findByUserId,
-    findByMail,
-    findByIdentifier,
     createUser,
     updateProfile,
-    setMail,
     setPassword,
     setHeader,
     deleteUser,
     renameUser,
     usernameChangeAvailableAt,
     verifyPassword,
+    verifyPasswordOrDummy,
     USERID_RE,
+    USERID_MAX,
+    isReservedId,
     USERID_CHANGE_INTERVAL_MS,
     DISPLAY_NAME_MAX,
     BIO_MAX,
