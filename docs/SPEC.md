@@ -223,6 +223,7 @@ Web/
 - **秘匿**: `X-Powered-By` 無効、`X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy: no-referrer`、`Cross-Origin-Resource-Policy: same-origin`。エラー時はスタックトレースを返さずログのみ。メールアドレスは収集・保存しない（旧データの `mail` は起動時に削除）。API 応答は `Cache-Control: no-store`、本番は HSTS を付与。端末一覧の IP/UA は本人にのみ。
 - **入力**: JSON ボディ ≤32KB。本文280 / 表示名50 / bio160 / link100、userId は英数字と `_`。ハッシュタグは `\p{L}\p{N}_` のみ（`<>"` 等を含めない）。
 - **本番**: `NODE_ENV=production` かつ `dist/` があれば minify 済みを配信。`npm run prod` で `build` → 起動。Node は本番では既定で `127.0.0.1`（ループバック）のみ待受け、リバースプロキシ経由のみを前提とする（`trust proxy` は1ホップのみ信頼。Node に直接到達できると `X-Forwarded-For` 偽装でレート制限を回避されるため）。**クラウド Gateway + 自宅 Origin 構成**（`GATEWAY_SECRET` 設定時）では、共有シークレットを持たないリクエストを Origin 側で `403` 拒否したうえで、Gateway が計算済みの実クライアントIP（`X-Origin-Client-Ip`）を `X-Forwarded-For` に採用し直すことで、なりすまし不可能な形で1ホップ信頼を維持する。手順は [DEPLOY.md](DEPLOY.md)。
+- **Tor 隠しサービスモード**: `TOR_MODE=true` を設定すると、Tor ネットワーク上の `.onion` アドレス向けに最適化する。HSTS ヘッダを無効化し（Tor は HTTP のみ）、Cookie の `Secure` フラグを外し（HTTP では `Secure` Cookie は送信されない）、`trust proxy` を1ホップに設定する。IP ベースのレート制限は Tor 経由のすべての接続が同一 IP から見えるため機能しないため、セッション/アカウント単位の制限に依存する。手順は [DEPLOY.md](DEPLOY.md)。
 
 ### 既知の制限
 - データストアは JSON ファイル。書き込みは一時ファイル+rename で原子的だが、プロセスを跨いだロックは無い。**単一 Node プロセスでの運用を前提**とし、クラスタモードや複数インスタンスへの水平分散はしない（[DEPLOY.md](DEPLOY.md) 参照）。
@@ -243,3 +244,5 @@ npm run prod     # 本番  → dist/ を生成し NODE_ENV=production で起動
 動画投稿を有効にするには `ffmpeg` を PATH に置く（または `FFMPEG_PATH` を設定）。
 
 本番環境（クラウド Gateway + 自宅 Origin を Cloudflare Tunnel で結ぶ構築手順・systemd サービス例・環境変数一覧）は [DEPLOY.md](DEPLOY.md) を参照。
+
+Tor 隠しサービスとしての公開（`.onion` アドレス）は `TOR_MODE=true` を設定し [DEPLOY.md](DEPLOY.md) の Tor セクションに従う。

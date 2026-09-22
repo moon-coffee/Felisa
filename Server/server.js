@@ -16,9 +16,13 @@ const session = require("./session");
 const app = express();
 const PORT = process.env.PORT || 80;
 const isProd = process.env.NODE_ENV === "production";
+const isTor = process.env.TOR_MODE === "true";
 // 本番は既定でループバックのみ待受（Caddy 等のリバースプロキシ経由を前提。
 // 直接インターネットに公開すると trust proxy の X-Forwarded-For 偽装が可能になるため）。
 const HOST = process.env.HOST || (isProd ? "127.0.0.1" : undefined);
+// Tor 隠しサービスモード: Tor がローカルで作成するソケット/ポートに転送する。
+// この場合リモートIPはすべて同一となるため、IP ベースのレート制限は機能しない。
+// Tor は1ホップのプロキシとして振る舞う。
 // クラウド側 Gateway（Cloudflare Tunnel の先）から届いたリクエストだけを信頼するための共有秘密。
 // 未設定なら旧来どおり（Caddy 等のリバースプロキシに直接ぶら下げる単体構成）として振る舞う。
 const GATEWAY_SECRET = process.env.GATEWAY_SECRET || "";
@@ -60,8 +64,10 @@ if (GATEWAY_SECRET) {
 
 // GATEWAY_SECRET 設定時: Gateway（Cloudflare Tunnel の直前のループバック）を1ホップ信頼。
 // 未設定時（従来構成）: Caddy 等のリバースプロキシを1ホップ信頼。
+// Tor モード: Tor が1ホップのプロキシとして機能するため1ホップ信頼。
 // いずれも Node が直接インターネットに公開されないことが前提。
-app.set("trust proxy", isProd ? 1 : false);
+const trustedProxies = isTor ? 1 : (isProd ? 1 : false);
+app.set("trust proxy", trustedProxies);
 
 /* ---------- セキュリティヘッダ ---------- */
 const CSP = [
@@ -85,7 +91,7 @@ app.use((req, res, next) => {
     res.setHeader("Referrer-Policy", "no-referrer");
     res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
     res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-    if (isProd) {
+    if (isProd && !isTor) {
         res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     }
     // API 応答（個人情報・セッション一覧など）を中間キャッシュ／ブラウザに残さない。

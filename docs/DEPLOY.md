@@ -322,3 +322,163 @@ nssm start FelisaGateway
 
 - **クラウド VPS を使う構成にしたい場合**: Gateway を VPS に移し、`ORIGIN_URL` を Origin 用の Cloudflare Tunnel ホスト名にして、Origin マシンでも `cloudflared`（Origin 専用トンネル）を動かす。VPS 側で Caddy による TLS 終端が必要になる。
 - **自宅 1 台の単体公開に戻したい場合**: `GATEWAY_SECRET` を設定せず、Origin マシンで `cloudflared` を動かして `your-domain.com` を直接 `127.0.0.1:3000` にルーティングする。Gateway プロセスは不要。
+
+---
+
+## Tor 隠しサービスとして公開する（`.onion` アドレス）
+
+Tor ネットワーク上で `.onion` アドレス経由で公開する場合の構成手順。Tor の隠しサービス機能を利用し、Tor がリクエストをローカルの Node サーバーに転送する。
+
+```
+ブラウザ（Tor Browser）
+  │  https://xxxxxxxxx.onion
+  ▼
+Tor ネットワーク（暗号化ルーティング）
+  │  Tor が隠しサービスとしてローカルのポートに転送
+  ▼
+自宅サーバー（Server/node.js, 127.0.0.1:3000）
+```
+
+Tor はエンドツーエンドの暗号化を提供するため、`.onion` アドレスは HTTP で動作する（HTTPS は不要）。そのため、本番設定の `NODE_ENV=production` であっても以下の調整が必要。
+
+### 1. Tor のインストール
+
+```bash
+# Debian/Ubuntu系
+sudo apt install tor
+```
+
+### 2. Tor の隠しサービス設定
+
+`/etc/tor/torrc` に以下を追加する（既存の内容と合わせる）：
+
+```ini
+# Felisa Tor 隠しサービス
+HiddenServiceDir /var/lib/tor/felisa_service/
+HiddenServiceVersion 3
+HiddenServicePort 80 127.0.0.1:3000
+```
+
+- `HiddenServiceDir`: `.onion` 鍵とホスト名の保存先。適切なパスに変更すること。
+- `HiddenServicePort 80 127.0.0.1:3000`: Tor の仮想ポート80を Node サーバーの3000番に転送。
+- `HiddenServiceVersion 3`: v3 隠しサービス（16文字の `.onion` アドレス）。
+
+設定後、Tor を再起動する：
+
+```bash
+sudo systemctl restart tor
+# ホスト名を確認
+sudo cat /var/lib/tor/felisa_service/hostname
+# => xxxxxxxxxxxxxxxx.onion
+```
+
+> **アップロード上限**: Tor ネットワークの回避策（consensus/Directory）はリクエストボディのサイズに制限を設ける場合がある。Felisa の動画上限（80MB）は Tor の制限に引っかかる可能性がある。テストして確認すること。
+
+### 3. Node サーバーの Tor モード設定
+
+`TOR_MODE=true` を環境変数として設定する。これにより以下の調整が自動的に行われる：
+
+- **HSTS ヘッダを無効化**: Tor は HTTP で動作するため、HSTS は意味をなさない。
+- **Cookie の `Secure` フラグを無効化**: HTTP では `Secure` フラグ付き Cookie は送信されない。
+- **`trust proxy` を 1 に設定**: Tor が1ホップのプロキシとして機能する。
+
+`.env`（systemd の `Environment=`）の例：
+
+```ini
+NODE_ENV=production
+PORT=3000
+HOST=0.0.0.0
+TOR_MODE=true
+```
+
+**単一プロセスで Tor モードを運用する場合**（Gateway + Origin を兼ねる）：
+
+```bash
+# Tor が直接 Node に接続するため、GATEWAY_SECRET は不要
+# systemd サービス例（/etc/systemd/system/felisa-tor.service）
+```
+
+```ini
+[Unit]
+Description=Felisa (Tor hidden service)
+After=network.target tor.service
+Requires=tor.service
+
+[Service]
+Type=simple
+User=felisa
+WorkingDirectory=/opt/felisa
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOST=0.0.0.0
+Environment=TOR_MODE=true
+ExecStart=/usr/bin/node Server/server.js
+Restart=on-failure
+RestartSec=3
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/felisa/Server/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo useradd -r -s /usr/sbin/nologin felisa
+sudo chown -R felisa:felisa /opt/felisa
+sudo systemctl daemon-reload
+sudo systemctl enable --now felisa-tor
+sudo systemctl status felisa-tor
+```
+
+### 4. ファイアウォールの設定
+
+Tor はアウトバウンド接続のみ必要。Node サーバーは `0.0.0.0:3000` で待ち受けるが、Tor 経由の接続のみが有効になるようにする：
+
+```bash
+# すべてのインバウンドを拒否（Tor はアウトバウンドのみ）
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+
+# SSH 管理用（LAN 内のみ）
+sudo ufw allow from 192.168.0.0/16 to any port 22 proto tcp
+
+# Tor の隠しサービスは Tor が直接ローカルに接続するため、
+# インバウンドの開放は不要。ただし Node が 0.0.0.0 で待ち受けている場合、
+# ファイアウォールで 3000 番のインバウンドを全て拒否しておくこと。
+```
+
+> **注意**: `HOST=0.0.0.0` で待ち受けていても、ファイアウォールでインバウンドが拒否されていれば外部からはアクセスできない。Tor が `127.0.0.1` に接続するため、Node のリスニングアドレスは `0.0.0.0` でも問題ない。
+
+### 5. Tor モードでの注意点
+
+- **IP ベースのレート制限は機能しない**: Tor 経由のすべてのリクエストは同一のローカルIP（`127.0.0.1`）から見えるため、`server.js` の IP ベースのレート制限（全体500/分・認証系20/分）は Tor モードでは機能しない。セッションやアカウント単位の制限に頼ることになる。
+- **HSTS は無効**: `.onion` は HTTP でのみ動作するため、HSTS ヘッダは送信されない。
+- **Cookie は `Secure` なし**: HTTP では `Secure` フラグ付き Cookie はブラウザに送信されないため、`Secure` を外す。
+- **動画アップロード**: Tor ネットワークの遅延と帯域制限により、大きな動画のアップロードは困難になる場合がある。
+- **`.onion` アドレスの秘密保持**: `/var/lib/tor/felisa_service/` 以下の秘密鍵ファイルは絶対に他の人に見せない。これを失うと `.onion` アドレスを再生成することになる。
+
+### 6. 既存の構成との組み合わせ
+
+既存のクラウド Gateway + 自宅 Origin 構成と Tor を組み合わせることも可能：
+
+- **Origin を Tor 隠しサービスとして運用**: Origin マシン（マシンB）を Tor 隠しサービスとして公開し、Gateway から Tor 経由で Origin に接続する。
+- **Gateway 単体を Tor で公開**: Gateway マシンを Tor 隠しサービスとして公開し、Gateway が Tor 経由で Origin に接続する。
+
+この場合、構成は以下のようになる：
+
+```
+ブラウザ（Tor Browser）
+  │  https://felisa.onion
+  ▼
+Tor ネットワーク
+  ▼
+自宅マシンA（Gateway として Tor 隠しサービス）
+  │  Gateway → Tor トンネル → Origin（自宅マシンB）
+  ▼  LAN 経由（GATEWAY_SECRET で認証）
+自宅マシンB（Origin）
+```
+
+この場合、Gateway の `TOR_MODE=true` を設定し、Gateway が Tor 隠しサービスとして動作する。Origin は引き続き LAN 内で待ち受け、Gateway のみ Tor の`.onion`アドレスを持つ。
