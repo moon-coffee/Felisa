@@ -17,8 +17,8 @@ const { URL } = require("url");
 const express = require("express");
 
 const app = express();
-const PORT = process.env.PORT || 80;
-const HOST = process.env.HOST || "127.0.0.1";
+const PORT = process.env.PORT
+const HOST = process.env.HOST
 const isProd = process.env.NODE_ENV === "production";
 
 // 既定値は置かない（推測可能な既定シークレットや、意図しない転送先を防ぐ）。

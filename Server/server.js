@@ -25,7 +25,7 @@ const HOST = process.env.HOST || (isProd ? "127.0.0.1" : undefined);
 // Tor は1ホップのプロキシとして振る舞う。
 // クラウド側 Gateway（Cloudflare Tunnel の先）から届いたリクエストだけを信頼するための共有秘密。
 // 未設定なら旧来どおり（Caddy 等のリバースプロキシに直接ぶら下げる単体構成）として振る舞う。
-const GATEWAY_SECRET = process.env.GATEWAY_SECRET || "";
+const GATEWAY_SECRET = process.env.GATEWAY_SECRET
 
 const CLIENT_DIR = path.join(__dirname, "..", "Client");
 const DIST_DIR = path.join(__dirname, "..", "dist");
