@@ -196,6 +196,14 @@
     }
 
     /* ================= 画像プレビュー（ライトボックス） ================= */
+    // home.css で html に overflow-y: scroll を持つため、ルート側も隠さないと
+    // 背景がスクロールできてしまう（html が visible のときだけ body が伝播する）。
+    function setScrollLock(on) {
+        const v = on ? "hidden" : "";
+        document.documentElement.style.overflow = v;
+        document.body.style.overflow = v;
+    }
+
     SNS.preview = function (url, type) {
         const box = document.createElement("div");
         box.className = "lightbox";
@@ -219,10 +227,10 @@
         close.innerHTML = '<i class="fa-solid fa-xmark"></i>';
         box.append(media, close);
         document.body.appendChild(box);
-        document.body.style.overflow = "hidden";
+        setScrollLock(true);
         const dispose = () => {
             box.remove();
-            document.body.style.overflow = "";
+            setScrollLock(false);
             document.removeEventListener("keydown", onKey);
         };
         const onKey = (e) => {

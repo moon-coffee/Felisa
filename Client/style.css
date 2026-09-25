@@ -1,4 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900&display=swap');
+/* Google Fonts は各ページの head で link (media="print") として読み込む。
+   @import はリモートCSSを描画ブロックさせるため使わない（ページ切替時の白い画面対策）。 */
+
+/* 白い画面対策: 対応ブラウザでは遷移先の描画が完了するまで旧ページを保持し、
+   その上にクロスフェードする。非対応ブラウザでは通常のページ遷移になる。 */
+@view-transition {
+    navigation: auto;
+}
 
 * {
     box-sizing: border-box;

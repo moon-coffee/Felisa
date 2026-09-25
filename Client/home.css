@@ -1019,6 +1019,21 @@ a.post-name:hover {
     min-height: 100vh;
 }
 
+/* ズレ対策: ページごとにコンテンツ量が違うと縦スクロールバーの有無が変わり、
+   幅が変わることで中央揃えの .app ごと横に数pxずれる（左右のUIがページごとに
+   ずれて見える原因）。スクロールバー領域を常に確保して幅を固定する。
+   scrollbar-gutter は、ライトボックス表示中など overflow を隠したときのずれも防ぐ。 */
+html {
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
+}
+
+/* 白い画面対策: 対応ブラウザでは遷移先の描画が完了するまで旧ページを保持し、
+   その上にクロスフェードする。非対応ブラウザでは通常のページ遷移になる。 */
+@view-transition {
+    navigation: auto;
+}
+
 /* ---- 新着ポストボタン ---- */
 .new-posts {
     position: sticky;

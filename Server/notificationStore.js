@@ -24,6 +24,18 @@ function add({ userId, type, actor, postId = null }) {
         return null; // 自分の操作は通知しない
     }
     const rows = readAll();
+    // 同一の通知（受信者・種別・行為者・対象投稿）が既に在る場合は積み増さない。
+    // そうしないと、いいねのON/OFFを繰り返すだけで相手の通知が無限に増え、
+    // notifications.json を肥大化させて DoS に使われてしまう。
+    const next = rows.filter(
+        (r) =>
+            !(
+                eq(r.userId, userId) &&
+                r.type === type &&
+                eq(r.actor, actor) &&
+                (r.postId || null) === (postId || null)
+            )
+    );
     const row = {
         id: crypto.randomUUID(),
         userId,
@@ -33,8 +45,8 @@ function add({ userId, type, actor, postId = null }) {
         createdAt: Date.now(),
         read: false,
     };
-    rows.push(row);
-    writeAll(rows);
+    next.push(row);
+    writeAll(next);
     return row;
 }
 

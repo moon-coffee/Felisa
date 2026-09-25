@@ -12,6 +12,7 @@ const trendsRouter = require("./trends");
 const mediaRouter = require("./media");
 const mediaStore = require("./mediaStore");
 const session = require("./session");
+const { isSecureRequest, setClientIp } = require("./trust");
 
 const app = express();
 const PORT = process.env.PORT || 80;
@@ -21,8 +22,9 @@ const isTor = process.env.TOR_MODE === "true";
 // 直接インターネットに公開すると trust proxy の X-Forwarded-For 偽装が可能になるため）。
 const HOST = process.env.HOST || (isProd ? "127.0.0.1" : undefined);
 // Tor 隠しサービスモード: Tor がローカルで作成するソケット/ポートに転送する。
-// この場合リモートIPはすべて同一となるため、IP ベースのレート制限は機能しない。
-// Tor は1ホップのプロキシとして振る舞う。
+// Tor は HTTP プロキシではなく透過的な TCP 転送なので、リモート IP は
+// 実際には区別できず（かつヘッダは接続者が偽装できる）、IP ベースのレート制限は
+// IP 単位ではなく「全体共有」の枠として機能する（下記 trust proxy の節を参照）。
 // クラウド側 Gateway（Cloudflare Tunnel の先）から届いたリクエストだけを信頼するための共有秘密。
 // 未設定なら旧来どおり（Caddy 等のリバースプロキシに直接ぶら下げる単体構成）として振る舞う。
 const GATEWAY_SECRET = process.env.GATEWAY_SECRET
@@ -40,13 +42,21 @@ if (!mediaStore.HAS_FFMPEG) {
     console.warn("[warn] ffmpeg が見つかりません。動画投稿は無効になります。");
 }
 
+// 参照されていない古いアップロード（投稿に紐付かない画像/動画）を掃除する。
+// 「アップロードして投稿しない」だけでディスクを无限に消費されないようにする。
+const sweep = mediaStore.sweepOrphans();
+if (sweep.removed > 0) {
+    console.log(`[info] 未参照の古いメディアを ${sweep.removed} 件削除しました。`);
+}
+setInterval(() => mediaStore.sweepOrphans(), 12 * 60 * 60 * 1000).unref();
+
 app.disable("x-powered-by");
 
 // クラウド Gateway 経由の構成（GATEWAY_SECRET 設定時）:
 // Cloudflare Tunnel の先にいる Node には理論上誰でも到達しうるため、
 // 共有秘密ヘッダを持たないリクエストはここで遮断する。
 // 実クライアントIPは Gateway が計算済みの値（X-Origin-Client-Ip）を
-// X-Forwarded-For に採用し直すことで、なりすまし不可能な形で引き継ぐ。
+// req.ip として引き継ぐ（X-Forwarded-For の解釈には頼らない）。
 if (GATEWAY_SECRET) {
     const secretBuf = Buffer.from(GATEWAY_SECRET);
     app.use((req, res, next) => {
@@ -56,17 +66,30 @@ if (GATEWAY_SECRET) {
         if (!ok) {
             return res.status(403).type("txt").send("Forbidden");
         }
-        const clientIp = req.headers["x-origin-client-ip"];
-        if (clientIp) req.headers["x-forwarded-for"] = clientIp;
+        // Gateway が計算した実クライアントIPを req.ip として確定させる。
+        // X-Forwarded-For を書き換えて trust proxy に解釈させる方式から変更したのは、
+        // Tor モードで trust proxy を切っているため（下記）。
+        setClientIp(req, req.headers["x-origin-client-ip"]);
         next();
     });
 }
 
-// GATEWAY_SECRET 設定時: Gateway（Cloudflare Tunnel の直前のループバック）を1ホップ信頼。
-// 未設定時（従来構成）: Caddy 等のリバースプロキシを1ホップ信頼。
-// Tor モード: Tor が1ホップのプロキシとして機能するため1ホップ信頼。
-// いずれも Node が直接インターネットに公開されないことが前提。
-const trustedProxies = isTor ? 1 : (isProd ? 1 : false);
+// Tor は HTTP プロキシではなく「クライアントの HTTP をそのまま届ける透過的な TCP
+// 転送」であり、HTTP ヘッダは送信者が書いたまま届く。つまり Tor 経由の
+// X-Forwarded-For は送信者が任意の IP を名乗れるため、信用すると
+//   - express-rate-limit のキー（req.ip）が無限に偽造でき、レート制限が完全に無効化
+//     （認証20/分・画像60/10分・動画6/15分がすべて回避され、登録スパム・
+//       ディスク/メモリ枯渇・総当たりが放題になる）
+//   - セッション一覧に表示される接続元 IP が偽装される
+// という問題が起きる。Tor モードでは X-Forwarded-For を一切信用しない。
+// （req.ip は接続元＝Tor のローカルアドレスになり、IP 単位の制限は全体共有に
+//  なる。これは docs の Tor モードの仕様どおりの挙動。）
+// clearnet（Cloudflare 等の TLS 終端）と Tor を同時に受ける構成では、
+// 経路ごとに Gateway を別ポートで起動して trust proxy の方針を分けることを推奨する。
+//
+// GATEWAY_SECRET 設定時: Gateway が計算した X-Origin-Client-Ip を req.ip に使う。
+// 未設定時（従来構成）: Caddy 等のリバースプロキシを1ホップ信頼する。
+const trustedProxies = isTor ? false : isProd ? 1 : false;
 app.set("trust proxy", trustedProxies);
 
 /* ---------- セキュリティヘッダ ---------- */
@@ -91,7 +114,7 @@ app.use((req, res, next) => {
     res.setHeader("Referrer-Policy", "no-referrer");
     res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
     res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-    if (isProd && !isTor) {
+    if (isProd && isSecureRequest(req)) {
         res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     }
     // API 応答（個人情報・セッション一覧など）を中間キャッシュ／ブラウザに残さない。
@@ -113,36 +136,21 @@ app.use("/api", (req, res, next) => {
     next();
 });
 
-/* ---------- ボディパーサ ---------- */
-// 画像・動画は生バイトで受け取る（パスごとに先に登録）。
-// 最大85MBをメモリに溜めるため、未ログインの要求はパースの前に弾く。
-const requireSession = (req, res, next) => {
-    if (["POST", "PUT"].includes(req.method) && !session.currentUserId(req)) {
-        return res
-            .status(401)
-            .json({ ok: false, errors: { form: "ログインが必要です。" } });
-    }
-    next();
-};
-for (const p of ["/api/media/image", "/api/media/video", "/api/me/avatar", "/api/me/header"]) {
-    app.use(p, requireSession);
-}
-app.use("/api/media/image", express.raw({ type: "image/png", limit: "9mb" }));
-app.use(
-    "/api/media/video",
-    express.raw({ type: ["video/*", "application/octet-stream"], limit: "85mb" })
-);
-app.use("/api/me/avatar", express.raw({ type: "image/png", limit: "9mb" }));
-app.use("/api/me/header", express.raw({ type: "image/png", limit: "9mb" }));
-app.use(express.json({ limit: "32kb" }));
-app.use(express.urlencoded({ extended: false, limit: "32kb" }));
-
 /* ---------- レート制限 ---------- */
+// ボディパーサより先に登録する（特に画像/動画は後述の理由で制限が先に走る必要がある）。
+//
+// Tor モードでは trust proxy = false（＝X-Forwarded-For を信用しない）にしてあるが、
+// express-rate-limit の組み込み検証 ERR_ERL_UNEXPECTED_X_FORWARDED_FOR は
+// 「trust proxy が false のまま XFF が付いてくる」ことを見なして毎リクエスト
+// エラーをログに出す。Tor 経由なら XFF を付け放題なので、ログが洪水に
+// なってしまう。この構成では意図的な設定なので明示的に無効化する。
+const rateLimitValidate = isTor ? { xForwardedForHeader: false } : true;
 const apiLimiter = rateLimit({
     windowMs: 60 * 1000,
     limit: 500,
     standardHeaders: true,
     legacyHeaders: false,
+    validate: rateLimitValidate,
     message: {
         ok: false,
         errors: { form: "リクエストが多すぎます。しばらく待ってから再度お試しください。" },
@@ -153,9 +161,35 @@ const authLimiter = rateLimit({
     limit: 20,
     standardHeaders: true,
     legacyHeaders: false,
+    validate: rateLimitValidate,
     message: {
         ok: false,
         errors: { form: "試行回数が多すぎます。1分ほど待ってから再度お試しください。" },
+    },
+});
+// 動画は ffmpeg 再エンコードが重い（CPU・数十秒〜）ため、全体レート制限とは別に
+// 専用の低い上限をかける。
+const videoLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 6,
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: rateLimitValidate,
+    message: {
+        ok: false,
+        errors: { form: "動画のアップロードが多すぎます。しばらく待ってから再度お試しください。" },
+    },
+});
+// 画像アップロードはディスクを消費するため、全体制限とは別に上限を設ける
+const imageLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000,
+    limit: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: rateLimitValidate,
+    message: {
+        ok: false,
+        errors: { form: "画像のアップロードが多すぎます。しばらく待ってから再度お試しください。" },
     },
 });
 for (const p of [
@@ -168,6 +202,65 @@ for (const p of [
 }
 // アカウント削除もパスワード再確認を伴うため、総当たり対策として同じ制限を掛ける
 app.delete("/api/me", authLimiter);
+
+/* ---------- ボディパーサ ---------- */
+// 画像・動画は生バイトで受け取る（パスごとに先に登録）。最大85MBをメモリに溜めるため、
+// ボディを読む前に必ず次の順で絞る。レート制限をボディ受信の後に置くと、
+// 上限超過のリクエストも全部受信してから拒否されるため、ここでは必ず先に掛ける。
+//   1. 認証（未ログインの大量リクエストで共有カウンタを消費させない）
+//   2. レート制限（時間あたりの回数）
+//   3. 同時実行数の上限（同一瞬間の同時アップロードによるメモリ枯渇）
+const RAW_PATHS = ["/api/media/image", "/api/media/video", "/api/me/avatar", "/api/me/header"];
+const requireSession = (req, res, next) => {
+    if (["POST", "PUT"].includes(req.method) && !session.currentUserId(req)) {
+        return res
+            .status(401)
+            .json({ ok: false, errors: { form: "ログインが必要です。" } });
+    }
+    next();
+};
+// 生ボディ（最大85MB）をメモリに抱えるリクエスト数に上限を置く。
+// レート制限だけでは「同じ瞬間に何十本も送る」メモリ枯渇（OOM）を防げない。
+const MAX_RAW_IN_FLIGHT = 4;
+let rawInFlight = 0;
+function rawConcurrency(req, res, next) {
+    if (req.method !== "POST" && req.method !== "PUT") return next();
+    if (rawInFlight >= MAX_RAW_IN_FLIGHT) {
+        return res.status(429).json({
+            ok: false,
+            errors: {
+                form: "アップロードが混み合っています。しばらく待ってから再度お試しください。",
+            },
+        });
+    }
+    rawInFlight += 1;
+    let released = false;
+    const release = () => {
+        if (released) return;
+        released = true;
+        rawInFlight -= 1;
+    };
+    res.on("finish", release);
+    res.on("close", release);
+    next();
+}
+const writeOnly = (mw) => (req, res, next) =>
+    ["POST", "PUT"].includes(req.method) ? mw(req, res, next) : next();
+
+for (const p of RAW_PATHS) app.use(p, requireSession);
+app.use("/api/media/image", writeOnly(imageLimiter));
+app.use("/api/media/video", writeOnly(videoLimiter));
+for (const p of RAW_PATHS) app.use(p, rawConcurrency);
+
+app.use("/api/media/image", express.raw({ type: "image/png", limit: "9mb" }));
+app.use(
+    "/api/media/video",
+    express.raw({ type: ["video/*", "application/octet-stream"], limit: "85mb" })
+);
+app.use("/api/me/avatar", express.raw({ type: "image/png", limit: "9mb" }));
+app.use("/api/me/header", express.raw({ type: "image/png", limit: "9mb" }));
+app.use(express.json({ limit: "32kb" }));
+app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 
 /* ---------- API ---------- */
 app.get("/api/capabilities", (req, res) => {

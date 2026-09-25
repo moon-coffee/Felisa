@@ -1,17 +1,32 @@
 // サーバー側セッションストアつき Cookie セッション。
 // Cookie にはランダムトークンのみ。ストアには sha256(token) を保存する。
 const store = require("./sessionStore");
+const { isSecureRequest } = require("./trust");
 
 const COOKIE_NAME = "sid";
 
-function cookieOptions() {
+// 送信元スキームごとに判定する（TOR_MODE のような全体フラグで一律に決めると、
+// 同一プロセスで配信している clearnet（HTTPS）側まで Secure が付かなくなる）。
+function baseCookieOptions(req) {
     return {
         httpOnly: true,
         sameSite: "lax",
-        secure: process.env.NODE_ENV === "production" && process.env.TOR_MODE !== "true",
-        maxAge: store.MAX_AGE_MS,
+        // HTTPS で届いたリクエストにだけ Secure を付ける。
+        // Tor の .onion は HTTP なので Secure を付けると Cookie が二度と
+        // 送信されずログインできなくなる。逆に clearnet（HTTPS）で Secure を
+        // 付けないままにすると平文の http:// 経由で Cookie が盗聴される。
+        secure: process.env.NODE_ENV === "production" && isSecureRequest(req),
         path: "/",
     };
+}
+
+function cookieOptions(req) {
+    return { ...baseCookieOptions(req), maxAge: store.MAX_AGE_MS };
+}
+
+// 消去用（maxAge を付けない。maxAge 付きで消すと逆に有効期限が延びてしまう）
+function clearOptions(req) {
+    return baseCookieOptions(req);
 }
 
 function parseCookies(header) {
@@ -41,7 +56,7 @@ function issue(res, userId, req) {
         ip: (req && req.ip) || "",
         ua: (req && req.headers["user-agent"]) || "",
     });
-    res.cookie(COOKIE_NAME, token, cookieOptions());
+    res.cookie(COOKIE_NAME, token, cookieOptions(req));
 }
 
 // 現在のセッションレコード（無ければ null）
@@ -61,7 +76,7 @@ function currentUserId(req) {
 function clear(req, res) {
     const row = currentSession(req);
     if (row) store.removeById(row.id);
-    res.clearCookie(COOKIE_NAME, { path: "/" });
+    res.clearCookie(COOKIE_NAME, clearOptions(req));
 }
 
 function listFor(userId, req) {
@@ -102,6 +117,7 @@ module.exports = {
     currentSession,
     currentUserId,
     clear,
+    clearOptions,
     listFor,
     revoke,
     revokeOthers,

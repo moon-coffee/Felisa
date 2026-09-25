@@ -1,35 +1,13 @@
 const express = require("express");
-const rateLimit = require("express-rate-limit");
 const mediaStore = require("./mediaStore");
 const userStore = require("./userStore");
 const session = require("./session");
 
 const router = express.Router();
 
-// 動画は ffmpeg 再エンコードが重い（CPU・数十秒〜）ため、全体レート制限とは別に
-// 専用の低い上限をかけ、同時実行数も制限してリソース枯渇（DoS）を防ぐ。
-const videoLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: 6,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: {
-        ok: false,
-        errors: { form: "動画のアップロードが多すぎます。しばらく待ってから再度お試しください。" },
-    },
-});
-
-// 画像アップロードはディスクを消費するため、全体制限とは別に上限を設ける
-const imageLimiter = rateLimit({
-    windowMs: 10 * 60 * 1000,
-    limit: 60,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: {
-        ok: false,
-        errors: { form: "画像のアップロードが多すぎます。しばらく待ってから再度お試しください。" },
-    },
-});
+// アップロードのレート制限（imageLimiter / videoLimiter）は
+// Server/server.js のボディパーサ登録前に掛けてある。
+// ボディを受信した後では85MB×N がメモリに溜まった後になってしまうため。
 
 const MAX_CONCURRENT_TRANSCODES = 2;
 let activeTranscodes = 0;
@@ -45,7 +23,7 @@ function requireAuth(req, res) {
 }
 
 // クライアントが canvas で PNG 化した画像を受け取る（body は express.raw で Buffer）
-router.post("/image", imageLimiter, (req, res) => {
+router.post("/image", (req, res) => {
     if (!requireAuth(req, res)) return;
     const result = mediaStore.saveImagePng(req.body);
     if (result.error) {
@@ -55,7 +33,7 @@ router.post("/image", imageLimiter, (req, res) => {
 });
 
 // 動画: サーバー側で MP4 / 480p / メタデータ削除に再エンコード
-router.post("/video", videoLimiter, async (req, res) => {
+router.post("/video", async (req, res) => {
     if (!requireAuth(req, res)) return;
     if (!mediaStore.HAS_FFMPEG) {
         return res.status(501).json({

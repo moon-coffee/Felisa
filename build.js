@@ -1,5 +1,3 @@
-// 本番用ビルド: Client/ を minify して dist/ に出力する。
-// 生成物は Server/server.js が NODE_ENV=production のとき配信する。
 const fs = require("fs");
 const fsp = fs.promises;
 const path = require("path");
@@ -41,8 +39,7 @@ async function processFile(srcPath, outPath) {
         await fsp.writeFile(outPath, result, "utf8");
         return;
     }
-
-    // 画像などはそのままコピー
+    
     await fsp.copyFile(srcPath, outPath);
 }
 

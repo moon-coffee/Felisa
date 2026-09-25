@@ -268,7 +268,7 @@ router.delete("/me", (req, res) => {
     session.revokeAll(uid);
     store.deleteUser(uid);
 
-    res.clearCookie(session.COOKIE_NAME, { path: "/" });
+    res.clearCookie(session.COOKIE_NAME, session.clearOptions(req));
     return res.json({ ok: true });
 });
 

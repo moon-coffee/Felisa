@@ -20,6 +20,7 @@ const app = express();
 const PORT = process.env.PORT
 const HOST = process.env.HOST
 const isProd = process.env.NODE_ENV === "production";
+const isTor = process.env.TOR_MODE === "true";
 
 // 既定値は置かない（推測可能な既定シークレットや、意図しない転送先を防ぐ）。
 const ORIGIN_URL = process.env.ORIGIN_URL || "";
@@ -42,8 +43,29 @@ const origin = new URL(ORIGIN_URL);
 const originClient = origin.protocol === "https:" ? https : http;
 
 // このプロセスの手前（Cloudflare / Caddy）1ホップのみ信頼して実クライアントIPを採用する。
-app.set("trust proxy", isProd ? 1 : false);
+// Tor モード: Tor は HTTP プロキシではなく透過的な TCP 転送のため、
+// X-Forwarded-For は接続者が自由に偽造できる。信用すると自宅 Origin 側の
+// レート制限（req.ip がキー）が丸ごと無効化されてしまうので、信用しない。
+// （req.ip は接続元＝Tor のローカルアドレスになり、Origin へはその値を渡す。
+//  clearnet と Tor を同時に受ける場合は、経路ごとにポートを分けて
+//  TOR_MODE の有無を分けることを推奨する。）
+app.set("trust proxy", isTor ? false : isProd ? 1 : false);
 app.disable("x-powered-by");
+
+// 実スキームを上流へ渡す（Tor 経由 = http / Cloudflare 経由 = https）。
+// 従来は常に "https" を上書きしていたが、Tor（HTTP）経由で届いたリクエストまで
+// https 扱いにすると Origin 側が Secure Cookie を付けてしまい、
+// .onion では二度と Cookie が送信されずログインできなくなる。
+// X-Forwarded-Proto を偽装された場合の影響は「自分宛の Cookie に Secure が付く」
+// だけで済む（他者への影響なし）ため、ここでは信用してよい。
+function forwardedProto(req) {
+    if (req.socket && req.socket.encrypted) return "https";
+    const proto = String(req.headers["x-forwarded-proto"] || "")
+        .split(",")[0]
+        .trim()
+        .toLowerCase();
+    return proto === "https" ? "https" : "http";
+}
 
 const CLIENT_DIR = path.join(__dirname, "..", "Client");
 const DIST_DIR = path.join(__dirname, "..", "dist");
@@ -85,11 +107,16 @@ app.use((req, res) => {
         headers[key] = value;
     }
     headers["host"] = origin.host;
-    headers["x-forwarded-proto"] = "https";
+    headers["x-forwarded-proto"] = forwardedProto(req);
+    // クライアントが持ち込んだ X-Forwarded-For は破棄し、Gateway が計算した値
+    // （単一エントリ）だけを上流へ渡す。余分なエントリを残すと Origin 側の
+    // trust proxy の解釈に紛れ込むため。
+    const clientIp = req.ip || req.socket.remoteAddress || "";
+    headers["x-forwarded-for"] = clientIp;
     // Server 側はこの2つのヘッダでのみ Gateway 経由のリクエストを信頼する。
     // どちらもクライアントから来た値は上で除去済みの `headers` には含めていないため上書きになる。
     headers["x-gateway-secret"] = GATEWAY_SECRET || "";
-    headers["x-origin-client-ip"] = req.ip || req.socket.remoteAddress || "";
+    headers["x-origin-client-ip"] = clientIp;
 
     const upstreamReq = originClient.request(
         {

@@ -158,6 +158,52 @@ function removeFiles(ids) {
     }
 }
 
+// 投稿から参照されていない古いメディアを削除する（ディスク枯渇対策）。
+// 「アップロードだけして投稿しない」を繰り返されると、レート制限を守っていても
+// ファイルが無限に増えるため。
+// 参照元の posts.json は直接パースし、読み込み/パースに失敗したら何もしない
+// （壊れていると全ファイルを「未参照」と誤判定して消してしまうため）。
+const POSTS_FILE = path.join(DATA_DIR, "posts.json");
+const ORPHAN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7日（長めに残して誤削除を防ぐ）
+
+function sweepOrphans(maxAgeMs = ORPHAN_MAX_AGE_MS) {
+    const result = { scanned: 0, removed: 0 };
+    let posts;
+    try {
+        posts = JSON.parse(fs.readFileSync(POSTS_FILE, "utf8"));
+    } catch {
+        return result;
+    }
+    if (!Array.isArray(posts)) return result;
+
+    const used = new Set();
+    for (const p of posts) {
+        if (!p || !Array.isArray(p.media)) continue;
+        for (const m of p.media) if (m && typeof m.id === "string") used.add(m.id);
+    }
+
+    let names;
+    try {
+        names = fs.readdirSync(MEDIA_DIR);
+    } catch {
+        return result;
+    }
+    const cutoff = Date.now() - maxAgeMs;
+    for (const name of names) {
+        if (!NAME_RE.test(name) || used.has(name)) continue;
+        const file = path.join(MEDIA_DIR, name);
+        try {
+            const st = fs.statSync(file);
+            if (st.mtimeMs >= cutoff) continue;
+            fs.rmSync(file, { force: true });
+            result.removed += 1;
+        } catch {
+            // 他のプロセスが触っている等は無視
+        }
+    }
+    return result;
+}
+
 module.exports = {
     HAS_FFMPEG,
     IMAGE_MAX_BYTES,
@@ -167,4 +213,5 @@ module.exports = {
     saveImagePng,
     saveVideo,
     removeFiles,
+    sweepOrphans,
 };
