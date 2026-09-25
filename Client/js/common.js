@@ -8,6 +8,7 @@
     SNS.api = async function (method, url, body, opts) {
         opts = opts || {};
         const init = { method, credentials: "same-origin", headers: {} };
+        if (opts.keepalive) init.keepalive = true;
         if (body !== undefined) {
             if (opts.raw) {
                 init.headers["Content-Type"] = opts.contentType || "application/octet-stream";
@@ -21,13 +22,22 @@
         try {
             res = await fetch(url, init);
         } catch (e) {
-            return { ok: false, status: 0, data: {} };
+            // 通信断。data.ok = false なので呼び出し側の失敗処理に流れ、
+            // どこにもエラーが出ない「無言失敗」を防ぐ。
+            return { ok: false, status: 0, data: { ok: false, network: true } };
         }
         let data = {};
         try {
             data = await res.json();
         } catch (e) {}
+        if (data === null || typeof data !== "object") data = {};
         return { ok: res.ok, status: res.status, data };
+    };
+
+    // 通信エラー時は「接続できません」、それ以外は既定文言を返す
+    SNS.failMessage = function (data, fallback) {
+        if (data && data.network) return "サーバーに接続できませんでした。通信環境を確認してください。";
+        return (data && data.errors && Object.values(data.errors).join(" ")) || fallback || "処理を完了できませんでした。";
     };
 
     /* ================= 汎用 ================= */
@@ -101,6 +111,9 @@
         if (!el) {
             el = document.createElement("div");
             el.className = "toast";
+            // 読み上げ対応（aria-live）
+            el.setAttribute("role", "status");
+            el.setAttribute("aria-live", "polite");
             document.body.appendChild(el);
         }
         el.textContent = msg;
@@ -109,6 +122,44 @@
         clearTimeout(SNS._toast);
         SNS._toast = setTimeout(() => el.classList.remove("is-shown"), 2600);
     };
+
+    // モーダル共通: role / Escape / フォーカストラップ / 開く前へのフォーカス復帰
+    function dialogize(back, close) {
+        back.setAttribute("role", "dialog");
+        back.setAttribute("aria-modal", "true");
+        const title = back.querySelector("h2");
+        if (title) {
+            if (!title.id) title.id = "dlg-title-" + (dialogize.n = (dialogize.n || 0) + 1);
+            back.setAttribute("aria-labelledby", title.id);
+        }
+        const prev = document.activeElement;
+        const selector = 'button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
+        const onKey = (e) => {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                close(false);
+                return;
+            }
+            if (e.key !== "Tab") return;
+            const items = Array.prototype.slice.call(back.querySelectorAll(selector));
+            if (!items.length) return;
+            const first = items[0];
+            const last = items[items.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+            }
+        };
+        document.addEventListener("keydown", onKey, true);
+        return function restore() {
+            document.removeEventListener("keydown", onKey, true);
+            if (prev && typeof prev.focus === "function" && document.contains(prev)) prev.focus();
+        };
+    }
+    SNS.dialogize = dialogize;
 
     SNS.confirm = function (opts) {
         opts = opts || {};
@@ -136,10 +187,13 @@
             card.append(h, p, row);
             back.appendChild(card);
             document.body.appendChild(back);
+            let restore = null;
             const close = (v) => {
+                if (restore) restore();
                 back.remove();
                 resolve(v);
             };
+            restore = dialogize(back, close);
             cancel.addEventListener("click", () => close(false));
             okBtn.addEventListener("click", () => close(true));
             back.addEventListener("click", (e) => {
@@ -150,6 +204,22 @@
     };
 
     /* ================= 投稿描画 ================= */
+    const ACTION_LABEL = {
+        reply: "返信",
+        repost: "リポスト",
+        like: "いいね",
+        bookmark: "ブックマーク",
+        share: "共有",
+    };
+
+    // ボタンのアクセシブル名（ラベル + 件数）を最新の状態に合わせる
+    function syncActionButton(b) {
+        const label = ACTION_LABEL[b.dataset.act] || "";
+        const span = b.querySelector("span");
+        const n = span && span.textContent ? parseInt(span.textContent, 10) : 0;
+        b.setAttribute("aria-label", n > 0 ? label + " " + n + "件" : label);
+    }
+
     function actionButton(act, iconClass, count, active) {
         const b = document.createElement("button");
         b.type = "button";
@@ -157,12 +227,17 @@
         b.dataset.act = act;
         const i = document.createElement("i");
         i.className = iconClass;
+        i.setAttribute("aria-hidden", "true");
         b.appendChild(i);
         if (count !== null && count !== undefined) {
             const s = document.createElement("span");
             s.textContent = count > 0 ? String(count) : "";
             b.appendChild(s);
         }
+        // トグル系は状態を読み上げられるようにする
+        if (act === "repost" || act === "like" || act === "bookmark")
+            b.setAttribute("aria-pressed", active ? "true" : "false");
+        syncActionButton(b);
         return b;
     }
 
@@ -351,7 +426,8 @@
             del.className = "post-del";
             del.dataset.act = "delete";
             del.title = "削除";
-            del.innerHTML = '<i class="fa-solid fa-trash-can"></i>';
+            del.setAttribute("aria-label", "このポストを削除");
+            del.innerHTML = '<i class="fa-solid fa-trash-can" aria-hidden="true"></i>';
             head.appendChild(del);
         }
         body.appendChild(head);
@@ -414,7 +490,10 @@
             "/api/posts/" + encodeURIComponent(id) + "/" + kind
         );
         if (res.status === 401) return (location.href = "/login");
-        if (!res.data.ok) return;
+        if (!res.data.ok) {
+            SNS.notify(SNS.failMessage(res.data, "更新できませんでした。もう一度お試しください。"), "error");
+            return;
+        }
         let on, count;
         if (kind === "like") { on = res.data.liked; count = res.data.likeCount; }
         else if (kind === "repost") { on = res.data.reposted; count = res.data.repostCount; }
@@ -428,6 +507,8 @@
             icon.className = on ? "fa-solid fa-bookmark" : "fa-regular fa-bookmark";
             SNS.notify(on ? "ブックマークに追加しました" : "ブックマークを削除しました");
         }
+        if (btn.hasAttribute("aria-pressed")) btn.setAttribute("aria-pressed", on ? "true" : "false");
+        syncActionButton(btn);
     }
 
     async function doDelete(id, article) {
@@ -444,6 +525,8 @@
             SNS.notify("ポストを削除しました");
             if (article.classList.contains("post--detail")) location.href = "/home";
             else article.remove();
+        } else {
+            SNS.notify(SNS.failMessage(res.data, "削除できませんでした"), "error");
         }
     }
 
@@ -545,9 +628,12 @@
                 panel.appendChild(b);
             }
             const rect = button.getBoundingClientRect();
-            panel.style.left = Math.max(8, rect.left) + "px";
-            panel.style.top = rect.bottom + window.scrollY + 6 + "px";
             document.body.appendChild(panel);
+            // はみ出し防止（右端でビューポート外に出ないように）
+            const w = panel.offsetWidth || 280;
+            panel.style.left =
+                Math.max(8, Math.min(rect.left, window.innerWidth - w - 8)) + "px";
+            panel.style.top = rect.bottom + window.scrollY + 6 + "px";
             setTimeout(() => {
                 document.addEventListener(
                     "click",
@@ -625,7 +711,8 @@
             const b = document.createElement("button");
             b.type = "button";
             b.title = title;
-            b.innerHTML = '<i class="' + icon + '"></i>';
+            b.setAttribute("aria-label", title);
+            b.innerHTML = '<i class="' + icon + '" aria-hidden="true"></i>';
             b.addEventListener("click", cb);
             tools.appendChild(b);
             return b;
@@ -813,23 +900,34 @@
             if (pending.length) payload.media = pending.map((m) => ({ id: m.id }));
             const poll = getPoll();
             if (poll) payload.poll = poll;
+            const idleLabel = submit.dataset.idleLabel || submit.textContent;
+            submit.dataset.idleLabel = idleLabel;
             submit.disabled = true;
-            const res = await SNS.api("POST", "/api/posts", payload);
-            if (res.status === 401) return (location.href = "/login");
-            if (res.data.ok) {
-                textarea.value = "";
-                autosize();
-                pending = [];
-                pollActive = false;
-                pollWrap.hidden = true;
-                delete pollWrap.dataset.built;
-                pollWrap.innerHTML = "";
-                renderPending();
-                sync();
-                if (onPosted) onPosted(res.data.post);
-            } else {
-                const err = res.data.errors || {};
-                SNS.notify(err.text || err.form || "投稿に失敗しました", "error");
+            submit.textContent = "送信中…";
+            try {
+                const res = await SNS.api("POST", "/api/posts", payload);
+                if (res.status === 401) return (location.href = "/login");
+                if (res.data.ok) {
+                    textarea.value = "";
+                    autosize();
+                    pending = [];
+                    pollActive = false;
+                    pollWrap.hidden = true;
+                    delete pollWrap.dataset.built;
+                    pollWrap.innerHTML = "";
+                    renderPending();
+                    sync();
+                    if (onPosted) onPosted(res.data.post);
+                } else {
+                    const err = res.data.errors || {};
+                    SNS.notify(
+                        SNS.failMessage(res.data, err.text || "投稿に失敗しました"),
+                        "error"
+                    );
+                    sync();
+                }
+            } finally {
+                submit.textContent = idleLabel;
                 sync();
             }
         });
@@ -839,46 +937,66 @@
 
     /* ================= シェル ================= */
     const NAV = [
-        { key: "home", href: "/home", icon: "fa-solid fa-house", label: "ホーム" },
-        { key: "search", href: "/search", icon: "fa-solid fa-magnifying-glass", label: "話題を検索" },
-        { key: "notifications", href: "/notifications", icon: "fa-regular fa-bell", label: "通知", badge: true },
-        { key: "bookmarks", href: "/bookmarks", icon: "fa-regular fa-bookmark", label: "ブックマーク" },
-        { key: "profile", href: "#", icon: "fa-regular fa-user", label: "プロフィール", nav: "profile" },
-        { key: "settings", href: "/settings", icon: "fa-solid fa-gear", label: "設定" },
+        { key: "home", href: "/home", icon: "fa-solid fa-house", label: "ホーム", short: "ホーム" },
+        { key: "search", href: "/search", icon: "fa-solid fa-magnifying-glass", label: "話題を検索", short: "検索" },
+        { key: "notifications", href: "/notifications", icon: "fa-regular fa-bell", label: "通知", short: "通知", badge: true },
+        { key: "bookmarks", href: "/bookmarks", icon: "fa-regular fa-bookmark", label: "ブックマーク", short: "ブックマーク" },
+        { key: "profile", href: "#", icon: "fa-regular fa-user", label: "プロフィール", short: "プロフィール", nav: "profile" },
+        { key: "settings", href: "/settings", icon: "fa-solid fa-gear", label: "設定", short: "設定" },
     ];
 
-    function sidebarHtml(activeKey) {
-        const items = NAV.map((n) => {
+    // ナビ項目（サイドバー / モバイル下部ナビで共用。short は狭い画面向け）
+    function navItemsHtml(activeKey, useShort) {
+        return NAV.map((n) => {
             const active = n.key === activeKey ? " active" : "";
             const badge = n.badge ? '<span class="nav-badge" hidden>0</span>' : "";
             const navAttr = n.nav ? ' data-nav="' + n.nav + '"' : "";
+            const cur = n.key === activeKey ? ' aria-current="page"' : "";
             return (
-                '<a href="' + n.href + '" class="nav-item' + active + '"' + navAttr +
-                '><i class="' + n.icon + '"></i><span>' + n.label + "</span>" + badge + "</a>"
+                '<a href="' + n.href + '" class="nav-item' + active + '"' + navAttr + cur +
+                '><i class="' + n.icon + '" aria-hidden="true"></i><span>' +
+                (useShort ? n.short : n.label) +
+                "</span>" + badge + "</a>"
             );
         }).join("");
+    }
+
+    function sidebarHtml(activeKey) {
         return (
             '<div class="sidebar-inner">' +
-            '<a href="/home" class="logo" aria-label="ホーム"><img src="Images/logo.png" alt="Logo"></a>' +
-            '<nav class="nav">' + items + "</nav>" +
-            '<button type="button" class="post-btn" id="go-compose">ポストする</button>' +
+            '<a href="/home" class="logo" aria-label="ホーム"><img src="Images/logo.png" alt="Felisa"></a>' +
+            '<nav class="nav" aria-label="メインナビゲーション">' + navItemsHtml(activeKey) + "</nav>" +
+            '<button type="button" class="post-btn" data-compose>ポストする</button>' +
             '<button type="button" class="account" id="logout" title="ログアウト">' +
             '<span class="avatar avatar--sm" data-user-avatar aria-hidden="true"><i class="fa-solid fa-user"></i></span>' +
             '<span class="account-meta"><span class="account-name" data-user-name>ゲスト</span>' +
             '<span class="account-handle" data-user-handle>@guest</span></span>' +
-            '<i class="fa-solid fa-arrow-right-from-bracket"></i></button>' +
+            '<span class="sr-only">ログアウト</span>' +
+            '<i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i></button>' +
             "</div>"
         );
     }
+
+    // モバイル（500px 以下）はサイドバーが消えるため、下部ナビ + 投稿 FAB を足す
+    function mobileNavHtml(activeKey) {
+        return (
+            '<nav class="mobile-nav" aria-label="メインナビゲーション">' +
+            navItemsHtml(activeKey, true) +
+            "</nav>" +
+            '<button type="button" class="mobile-compose" data-compose aria-label="ポストする">' +
+            '<i class="fa-solid fa-plus" aria-hidden="true"></i></button>'
+        );
+    }
+
     function asideHtml() {
         return (
             '<div class="aside-inner">' +
-            '<form class="search" data-search-form><i class="fa-solid fa-magnifying-glass"></i>' +
+            '<form class="search" data-search-form><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>' +
             '<input type="search" placeholder="検索" aria-label="検索"></form>' +
             '<section class="card"><h2>いま起きていること</h2>' +
             '<div class="trends" data-trends><div class="trend-empty">読み込み中…</div></div></section>' +
-            '<footer class="aside-footer"><a href="#">利用規約</a><a href="#">プライバシー</a>' +
-            '<a href="#">Cookie</a><span>© 2026 Felisa</span></footer></div>'
+            '<footer class="aside-footer"><span>利用規約</span><span>プライバシー</span>' +
+            "<span>Cookie</span><span>© 2026 Felisa</span></footer></div>"
         );
     }
 
@@ -916,10 +1034,11 @@
     }
 
     SNS.setBadge = function (n) {
-        const badge = document.querySelector(".nav-badge");
-        if (!badge) return;
-        badge.textContent = n > 99 ? "99+" : String(n);
-        badge.hidden = !n;
+        // サイドバーとモバイル下部ナビの両方を更新
+        document.querySelectorAll(".nav-badge").forEach((badge) => {
+            badge.textContent = n > 99 ? "99+" : String(n);
+            badge.hidden = !n;
+        });
     };
     SNS.applyShellUser = function (me) {
         if (!me) return;
@@ -932,8 +1051,9 @@
             el.innerHTML = "";
             el.appendChild(SNS.imgFor(me));
         });
-        const pnav = document.querySelector('[data-nav="profile"]');
-        if (pnav) pnav.href = "/" + encodeURIComponent(me.userId);
+        document.querySelectorAll('[data-nav="profile"]').forEach((pnav) => {
+            pnav.href = "/" + encodeURIComponent(me.userId);
+        });
         SNS.setBadge(me.unreadNotifications || 0);
     };
     SNS.loadMe = async function (opts) {
@@ -955,6 +1075,9 @@
         const aside = document.querySelector("[data-shell-aside]");
         if (sidebar) sidebar.innerHTML = sidebarHtml(activeKey);
         if (aside) aside.innerHTML = asideHtml();
+        // モバイル用の下部ナビ（CSS で 500px 以下のみ表示）
+        if (!document.querySelector(".mobile-nav"))
+            document.body.insertAdjacentHTML("beforeend", mobileNavHtml(activeKey));
 
         document.querySelectorAll("[data-search-form]").forEach((form) => {
             form.addEventListener("submit", (e) => {
@@ -963,16 +1086,25 @@
                 if (v) location.href = "/search?q=" + encodeURIComponent(v);
             });
         });
-        const compose = document.getElementById("go-compose");
-        if (compose)
-            compose.addEventListener("click", () => {
+        document.querySelectorAll("[data-compose]").forEach((btn) => {
+            btn.addEventListener("click", () => {
                 const t = document.getElementById("composer-text");
-                if (t && location.pathname === "/home") t.focus();
-                else location.href = "/home";
+                if (t && location.pathname === "/home") {
+                    t.scrollIntoView({ block: "center" });
+                    t.focus();
+                } else location.href = "/home";
             });
+        });
         const logout = document.getElementById("logout");
         if (logout)
             logout.addEventListener("click", async () => {
+                // 誤操作防止（名前を押すだけで即ログアウトしない）
+                const yes = await SNS.confirm({
+                    title: "ログアウト",
+                    message: "ログアウトしますか？次回はユーザーIDとパスワードでログインし直してください。",
+                    okText: "ログアウト",
+                });
+                if (!yes) return;
                 await SNS.api("POST", "/api/logout");
                 location.replace("/login");
             });

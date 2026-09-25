@@ -18,6 +18,8 @@ const router = express.Router();
 const USERID_RE = /^[A-Za-z0-9_]+$/;
 const PASSWORD_MIN = 8;
 const PASSWORD_MAX = 128; // scrypt に巨大な入力を渡させない
+const EMAIL_MAX = 254;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; // 簡易な形式チェック（送信はしない）
 
 // ログイン失敗の連続を口座（ユーザーID）単位で数え、分散ブルートフォースを抑える。
 // IP 単位のレート制限（server.js）を補完するもの。
@@ -168,6 +170,35 @@ router.put("/me", (req, res) => {
     if (typeof body.link === "string") patch.link = body.link;
     const updated = store.updateProfile(user.userId, patch);
     return res.json({ ok: true, user: present.selfUser(updated) });
+});
+
+// メールアドレス（任意・あとから登録/変更/解除できる）。
+// メール送信機能は無く保存だけの項目なので、パスワードの再確認は不要。
+// 空文字なら解除（未登録）として受け付ける。
+router.put("/me/email", (req, res) => {
+    const user = requireAuth(req, res);
+    if (!user) return;
+    const email = asString((req.body || {}).email).trim();
+
+    if (email !== "") {
+        if (email.length > EMAIL_MAX) {
+            return res.status(400).json({
+                ok: false,
+                errors: {
+                    email: `メールアドレスは${EMAIL_MAX}文字以内で入力してください。`,
+                },
+            });
+        }
+        if (!EMAIL_RE.test(email)) {
+            return res.status(400).json({
+                ok: false,
+                errors: { email: "メールアドレスの形式が正しくありません。" },
+            });
+        }
+    }
+
+    const updated = store.setEmail(user.userId, email);
+    return res.json({ ok: true, email: updated.email });
 });
 
 router.put("/me/password", (req, res) => {

@@ -34,6 +34,7 @@ loginForm.addEventListener("submit", async function (event) {
     }
 
     loginButton.disabled = true;
+    loginButton.textContent = "ログイン中…";
 
     try {
         const res = await fetch("/api/login", {
@@ -64,5 +65,6 @@ loginForm.addEventListener("submit", async function (event) {
             "サーバーに接続できませんでした。通信環境を確認してください。";
     } finally {
         loginButton.disabled = false;
+        loginButton.textContent = "ログイン";
     }
 });

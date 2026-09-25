@@ -12,12 +12,19 @@ const replyBox = document.getElementById("reply-box");
 replyBox.dataset.replyTo = postId;
 
 async function load() {
+    statusEl.textContent = "読み込み中…";
     const res = await SNS.api("GET", "/api/posts/" + encodeURIComponent(postId));
     if (!res.data || !res.data.ok) {
+        parentsEl.innerHTML = "";
         mainEl.innerHTML = "";
-        statusEl.textContent = "投稿が見つかりません。";
+        repliesEl.innerHTML = "";
+        statusEl.textContent =
+            res.status === 0
+                ? "サーバーに接続できませんでした。通信環境を確認してください。"
+                : "投稿が見つかりません。";
         return;
     }
+    statusEl.textContent = "";
 
     parentsEl.innerHTML = "";
     for (const parent of res.data.parents || []) {

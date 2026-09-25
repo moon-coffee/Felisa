@@ -6,6 +6,8 @@
     <meta name="color-scheme" content="dark">
     <base href="/">
     <style>html,body{background:#252525}</style>
+    <!-- テーマは head の早期に適用する（js/theme.js が data-theme を付与） -->
+    <script src="js/theme.js"></script>
     <!-- リモートCSSは media="print" にして描画をブロックさせない（ページ切替時の白い画面対策）。
          取得完了後に js/defer-css.js が media="all" に戻して適用する。 -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900&display=swap" media="print" data-lazy-css>

@@ -1,11 +1,12 @@
 :root {
-    /* login.html / signin.html（style.css）の配色に合わせる */
+    /* login.html / signin.html（style.css）の配色に合わせる（ダーク＝既定） */
     --bg: #252525;
     --panel: #151515;
     --panel-hover: #1f1f1f;
     --border: #3a3a3a;
     --text: #ffffff;
-    --text-dim: #757575;
+    /* #252525 に対し 4.7:1（WCAG AA の本文 4.5:1 を満たす） */
+    --text-dim: #8f8f8f;
     --accent: #60afff;
     --accent-hover: #4a9be8;
     --accent-soft: rgba(96, 175, 255, 0.12);
@@ -13,6 +14,47 @@
     --like: #f91880;
     --repost: #00ba7c;
     --radius: 15px;
+    /* 半透明指定用の RGB 値（--bg などと同期すること） */
+    --bg-rgb: 37, 37, 37;
+    --accent-rgb: 96, 175, 255;
+    --like-rgb: 249, 24, 128;
+    --repost-rgb: 0, 186, 124;
+    /* 入力欄の通常時アウトライン */
+    --outline: rgba(255, 255, 255, 0.85);
+    /* 白地ボタン（ポストする / フォロー等） */
+    --btn-solid-bg: #ffffff;
+    --btn-solid-fg: #000000;
+    /* アバターのプレースホルダ */
+    --avatar-from: #3a3f45;
+    --avatar-to: #565c64;
+    --avatar-fg: #aab0b6;
+}
+
+/* ============ ライトテーマ（settings から切替 / 未設定なら OS 設定） ============ */
+html[data-theme="light"] {
+    --bg: #f5f5f5;
+    --panel: #ffffff;
+    --panel-hover: #efefef;
+    --border: #dcdcdc;
+    --text: #0f1419;
+    /* #f5f5f5 に対し 4.9:1 */
+    --text-dim: #6b6b6b;
+    --accent: #1a6fd4;
+    --accent-hover: #155bb0;
+    --accent-soft: rgba(26, 111, 212, 0.1);
+    --hover: rgba(0, 0, 0, 0.04);
+    --like: #d01a6b;
+    --repost: #0a8559;
+    --bg-rgb: 245, 245, 245;
+    --accent-rgb: 26, 111, 212;
+    --like-rgb: 208, 26, 107;
+    --repost-rgb: 10, 133, 89;
+    --outline: rgba(0, 0, 0, 0.35);
+    --btn-solid-bg: #0f1419;
+    --btn-solid-fg: #ffffff;
+    --avatar-from: #d5d9de;
+    --avatar-to: #e9ecef;
+    --avatar-fg: #61686f;
 }
 
 * {
@@ -117,8 +159,8 @@ button {
     width: 90%;
     padding: 14px;
     border-radius: var(--radius);
-    background-color: #ffffff;
-    color: #000000;
+    background-color: var(--btn-solid-bg);
+    color: var(--btn-solid-fg);
     font-size: 16px;
     font-weight: 700;
     transition: opacity 0.2s;
@@ -173,11 +215,11 @@ button {
     height: 40px;
     border-radius: 50%;
     overflow: hidden;
-    background: linear-gradient(135deg, #3a3f45, #565c64);
+    background: linear-gradient(135deg, var(--avatar-from), var(--avatar-to));
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #aab0b6;
+    color: var(--avatar-fg);
     font-size: 18px;
 }
 
@@ -206,7 +248,7 @@ button {
     top: 0;
     z-index: 10;
     backdrop-filter: blur(12px);
-    background-color: rgba(37, 37, 37, 0.85);
+    background-color: rgba(var(--bg-rgb), 0.85);
     border-bottom: 1px solid var(--border);
 }
 
@@ -399,7 +441,7 @@ a.post-name:hover {
 
 .post-del:hover {
     color: var(--like);
-    background-color: rgba(249, 24, 128, 0.12);
+    background-color: rgba(var(--like-rgb), 0.12);
 }
 
 .post-text {
@@ -463,14 +505,11 @@ a.post-name:hover {
 
 .pa--repost:hover,
 .pa--repost.is-active { color: var(--repost); }
-.pa--repost:hover i { background-color: rgba(0, 186, 124, 0.12); }
+.pa--repost:hover i { background-color: rgba(var(--repost-rgb), 0.12); }
 
 .pa--like:hover,
 .pa--like.is-active { color: var(--like); }
-.pa--like:hover i { background-color: rgba(249, 24, 128, 0.12); }
-
-.pa--view:hover { color: var(--accent); }
-.pa--view:hover i { background-color: var(--accent-soft); }
+.pa--like:hover i { background-color: rgba(var(--like-rgb), 0.12); }
 
 .pa--share:hover { color: var(--accent); }
 .pa--share:hover i { background-color: var(--accent-soft); }
@@ -524,7 +563,7 @@ a.post-name:hover {
     padding: 12px 16px 12px 44px;
     border-radius: 9999px;
     border: none;
-    outline: 1px solid var(--text);
+    outline: 1px solid var(--outline);
     background-color: var(--panel);
     color: var(--text);
     font-size: 15px;
@@ -575,18 +614,6 @@ a.post-name:hover {
     font-weight: 700;
 }
 
-.card-more {
-    display: block;
-    padding: 16px;
-    font-size: 15px;
-    color: var(--accent);
-    transition: background-color 0.2s;
-}
-
-.card-more:hover {
-    background-color: var(--panel-hover);
-}
-
 .who {
     display: flex;
     align-items: center;
@@ -623,8 +650,8 @@ a.post-name:hover {
 .follow-btn {
     padding: 8px 16px;
     border-radius: var(--radius);
-    background-color: #ffffff;
-    color: #000000;
+    background-color: var(--btn-solid-bg);
+    color: var(--btn-solid-fg);
     font-size: 14px;
     font-weight: 700;
     white-space: nowrap;
@@ -651,6 +678,24 @@ a.post-name:hover {
 /* ============ 汎用パーツ ============ */
 [hidden] {
     display: none !important;
+}
+
+/* キーボード操作時のフォーカスリング（マウス操作では出さない） */
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* スクリーンリーダー専用（視覚のみ隠す） */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
 }
 
 .nav-badge {
@@ -692,8 +737,8 @@ a.post-name:hover {
 }
 
 .btn-solid {
-    background-color: #ffffff;
-    color: #000000;
+    background-color: var(--btn-solid-bg);
+    color: var(--btn-solid-fg);
 }
 
 .btn-solid:hover {
@@ -712,7 +757,7 @@ a.post-name:hover {
 
 .follow-toggle.btn-outline:hover {
     color: var(--like);
-    border-color: rgba(249, 24, 128, 0.4);
+    border-color: rgba(var(--like-rgb), 0.4);
 }
 
 /* feed-header 派生（戻る矢印 + タイトル行） */
@@ -744,6 +789,8 @@ a.post-name:hover {
 .profile-banner {
     height: 180px;
     background-color: var(--panel);
+    background-size: cover;
+    background-position: center;
     border-bottom: 1px solid var(--border);
 }
 
@@ -827,7 +874,7 @@ a.post-name:hover {
 }
 
 .notif--unread {
-    background-color: rgba(96, 175, 255, 0.06);
+    background-color: rgba(var(--accent-rgb), 0.08);
 }
 
 .notif-icon {
@@ -913,7 +960,7 @@ a.post-name:hover {
     width: 100%;
     padding: 12px;
     border: none;
-    outline: 1px solid var(--text);
+    outline: 1px solid var(--outline);
     border-radius: 10px;
     background-color: var(--panel);
     color: var(--text);
@@ -972,18 +1019,28 @@ a.post-name:hover {
     .nav-item span,
     .account-meta,
     .account > i {
-        display: none;
+        /* display:none だと支援技術からも消えるため、視覚のみ隠す */
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
     }
     .nav-item {
         padding: 12px;
     }
-    .post-btn {
+    /* サイドバーの「ポストする」だけを＋丸ボタンにする。
+       .post-btn--sm（コンポーザの送信ボタン）に影響しないようスコープを絞る。 */
+    .sidebar .post-btn {
         width: 52px;
         height: 52px;
         padding: 0;
         font-size: 0;
     }
-    .post-btn::after {
+    .sidebar .post-btn::after {
         content: "＋";
         font-size: 24px;
         font-weight: 400;
@@ -991,6 +1048,12 @@ a.post-name:hover {
     .account {
         justify-content: center;
     }
+}
+
+/* ============ モバイル: 下部ナビゲーション ============ */
+.mobile-nav,
+.mobile-compose {
+    display: none;
 }
 
 @media (max-width: 500px) {
@@ -1002,6 +1065,70 @@ a.post-name:hover {
     }
     .feed {
         border: none;
+    }
+    /* 固定の下部ナビ分の余白 */
+    body {
+        padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+    }
+    .mobile-nav {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 90;
+        display: flex;
+        background-color: rgba(var(--bg-rgb), 0.96);
+        backdrop-filter: blur(12px);
+        border-top: 1px solid var(--border);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    .mobile-nav a {
+        position: relative;
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        min-height: 54px;
+        padding: 4px 0;
+        color: var(--text-dim);
+        font-size: 9px;
+        line-height: 1.2;
+        transition: color 0.2s;
+    }
+    .mobile-nav a i {
+        font-size: 21px;
+    }
+    .mobile-nav a.active {
+        color: var(--text);
+        font-weight: 700;
+    }
+    .mobile-nav a .nav-badge {
+        position: absolute;
+        top: 6px;
+        left: 50%;
+        margin-left: 4px;
+    }
+    .mobile-compose {
+        position: fixed;
+        right: 16px;
+        bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+        z-index: 91;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        background-color: var(--btn-solid-bg);
+        color: var(--btn-solid-fg);
+        font-size: 22px;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    }
+    .mobile-compose:disabled {
+        opacity: 0.5;
     }
 }
 
@@ -1042,7 +1169,7 @@ html {
     display: block;
     width: 100%;
     padding: 12px;
-    background-color: rgba(37, 37, 37, 0.92);
+    background-color: rgba(var(--bg-rgb), 0.92);
     backdrop-filter: blur(8px);
     border-bottom: 1px solid var(--border);
     color: var(--accent);
@@ -1050,7 +1177,7 @@ html {
     font-weight: 700;
 }
 .new-posts:hover {
-    background-color: rgba(31, 31, 31, 0.95);
+    background-color: rgba(var(--bg-rgb), 0.98);
 }
 
 /* ---- 投稿メディア ---- */
@@ -1071,10 +1198,6 @@ html {
 .post-media.media-3,
 .post-media.media-4 {
     grid-template-columns: 1fr 1fr;
-}
-.post-media a {
-    display: block;
-    background: #000;
 }
 .post-media img {
     width: 100%;
@@ -1132,11 +1255,11 @@ html {
     left: 0;
     top: 0;
     bottom: 0;
-    background-color: rgba(96, 175, 255, 0.25);
+    background-color: rgba(var(--accent-rgb), 0.25);
     z-index: 0;
 }
 .poll-result.is-mine .poll-bar {
-    background-color: rgba(96, 175, 255, 0.45);
+    background-color: rgba(var(--accent-rgb), 0.45);
 }
 .poll-label,
 .poll-pct {
@@ -1273,12 +1396,7 @@ html {
     background: var(--hover);
 }
 
-/* ---- プロフィール: ヘッダ画像・リンク・利用開始日 ---- */
-.profile-banner {
-    background-color: var(--panel);
-    background-size: cover;
-    background-position: center;
-}
+/* ---- プロフィール: リンク・利用開始日 ---- */
 .profile-meta {
     display: flex;
     flex-wrap: wrap;
@@ -1304,7 +1422,7 @@ html {
 .edit-images {
     display: flex;
     gap: 10px;
-    margin-bottom: 6px;
+    margin-bottom: 10px;
 }
 
 /* ---- モーダル: メッセージ / アクション / danger ---- */
@@ -1397,9 +1515,6 @@ html {
     font-weight: 700;
     color: var(--repost);
 }
-.session--current {
-    /* 強調なし。tag で示す */
-}
 
 /* ---- トースト: 種別 ---- */
 .toast--error {
@@ -1446,17 +1561,6 @@ html {
     padding: 0;
     background: #000;
     cursor: zoom-in;
-}
-.media-thumb img {
-    width: 100%;
-    height: 100%;
-    max-height: 380px;
-    object-fit: cover;
-    display: block;
-}
-.post-media.media-1 .media-thumb img {
-    max-height: 460px;
-    object-fit: contain;
 }
 
 .avatar.is-clickable,
@@ -1506,9 +1610,6 @@ html {
 }
 
 /* 編集モーダル: 画像プレビュー */
-.edit-images {
-    margin-bottom: 10px;
-}
 .edit-header-preview {
     position: relative;
     height: 110px;
@@ -1536,4 +1637,109 @@ html {
     gap: 8px;
     justify-content: flex-end;
     margin-top: 30px;
+}
+
+/* ============ v0.4: 設定（テーマ・プロフィール・メール）/ 通知バー / 検索のユーザー ============ */
+
+/* ヘッダ行（タイトル + 右側の操作） */
+.feed-header--row h1 {
+    padding: 0;
+    font-size: 20px;
+    font-weight: 800;
+}
+
+.feed-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* 設定: テーマ選択 */
+.theme-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.theme-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.theme-option:hover {
+    background-color: var(--hover);
+}
+
+.theme-option input {
+    accent-color: var(--accent);
+}
+
+.theme-option:has(input:checked) {
+    border-color: var(--accent);
+    background-color: var(--accent-soft);
+}
+
+.theme-option input:checked + span {
+    color: var(--accent);
+    font-weight: 700;
+}
+
+/* 設定: ボタン横並び */
+.settings-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.profile-link-inline {
+    color: var(--accent);
+    text-decoration: underline;
+}
+
+/* 通知: 未読件数バッジ */
+.notif-unread {
+    padding: 4px 10px;
+    border-radius: 9999px;
+    background-color: rgba(var(--accent-rgb), 0.15);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+/* 検索結果のユーザー行（.who を流用） */
+.who-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+}
+
+.who-link .who-meta {
+    margin-right: 0;
+}
+
+.who .follow-btn {
+    flex-shrink: 0;
+}
+
+.section-label {
+    padding: 12px 16px;
+    font-size: 15px;
+    font-weight: 800;
+    border-bottom: 1px solid var(--border);
+}
+
+/* カード内のユーザー行の区切り */
+.card .who + .who {
+    border-top: 1px solid var(--border);
 }

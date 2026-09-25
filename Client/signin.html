@@ -5,35 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="dark">
     <style>html,body{background:#252525}</style>
+    <!-- テーマは head の早期に適用する（js/theme.js が data-theme を付与） -->
+    <script src="js/theme.js"></script>
     <!-- リモートCSSは media="print" にして描画をブロックさせない（ページ切替時の白い画面対策）。
          取得完了後に js/defer-css.js が media="all" に戻して適用する。 -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900&display=swap" media="print" data-lazy-css>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.css" media="print" data-lazy-css>
     <link rel="stylesheet" href="style.css">
     <script defer src="js/defer-css.js"></script>
-    <title>Sign Up</title>
+    <title>新規登録</title>
 </head>
 <body>
-    <div class="container" id="container">
+    <div class="container">
         <div class="form-container create-account">
             <form class="form" id="RegForm" novalidate>
-                <img src="Images/logo.png" alt="Logo" class="logo">
-                <p>Alpha v0.01</p>
+                <img src="Images/logo.png" alt="Felisa" class="logo">
+                <p>Alpha v0.0.1</p>
                 <h1>Felisaに登録</h1>
-                <div class="social-icons">
-                    <a href="#" class="icon"><i
-                    class="fa-brands 
-                    fa-google-plus-g"></i></a>
-                    <a href="#" class="icon"><i
-                    class="fa-brands 
-                    fa-facebook-f"></i></a>
-                    <a href="#" class="icon"><i
-                    class="fa-brands 
-                    fa-github"></i></a>
-                    <a href="#" class="icon"><i
-                    class="fa-brands 
-                    fa-linkedin-in"></i></a>
-                </div>
             <div class="input-group">
                 <input type="text" placeholder="ユーザーID" id="reg-userid" autocomplete="username" required>
                 <label for="reg-userid">ユーザーID</label>
@@ -41,16 +29,19 @@
             </div>
             <div class="input-group">
                 <input type="password" placeholder="パスワード" id="reg-password" autocomplete="new-password" required>
-                <label for="reg-password">パスワード</label>
+                <label for="reg-password">パスワード（8文字以上）</label>
                 <span class="error-message" id="reg-password-error"></span>
             </div>
             <button type="submit" id="reg-button">登録</button>
-            <span class="error-message" id="reg-form-message"></span>
+            <span class="error-message" id="reg-form-message" role="alert"></span>
             <p>アカウントをすでにお持ちの場合は、<a href="/login">こちら</a>からログインしてください。</p>
-            <p>メールアドレスは不要です。パスワードを忘れるとアカウントに再度ログインできなくなるため、必ず控えておいてください。</p>
+            <p class="legal-note">
+                メールアドレスは登録時不要です。あとから設定画面で任意で登録できます。
+                パスワードを忘れるとアカウントに再度ログインできなくなるため、必ず控えておいてください。
+            </p>
             </form>
         </div>
+    </div>
     <script src="js/signin.js"></script>
 </body>
-
 </html>

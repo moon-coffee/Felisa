@@ -6,6 +6,8 @@
     <meta name="color-scheme" content="dark">
     <base href="/">
     <style>html,body{background:#252525}</style>
+    <!-- テーマは head の早期に適用する（js/theme.js が data-theme を付与） -->
+    <script src="js/theme.js"></script>
     <!-- リモートCSSは media="print" にして描画をブロックさせない（ページ切替時の白い画面対策）。
          取得完了後に js/defer-css.js が media="all" に戻して適用する。 -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900&display=swap" media="print" data-lazy-css>
@@ -50,13 +52,17 @@
                 </div>
             </div>
 
-            <nav class="tabs" id="profile-tabs">
-                <button type="button" class="tab active" data-tab="posts"><span>ポスト</span></button>
-                <button type="button" class="tab" data-tab="likes"><span>いいね</span></button>
+            <nav class="tabs" id="profile-tabs" role="tablist" aria-label="プロフィールの表示切り替え">
+                <button type="button" class="tab active" role="tab" aria-selected="true"
+                    aria-controls="profile-list" data-tab="posts"><span>ポスト</span></button>
+                <button type="button" class="tab" role="tab" aria-selected="false"
+                    aria-controls="profile-list" data-tab="likes"><span>いいね</span></button>
             </nav>
 
-            <div id="profile-list"></div>
-            <div class="feed-end" id="profile-status"></div>
+            <div id="profile-list" role="tabpanel" tabindex="0" aria-label="プロフィールの投稿一覧">
+                <div class="feed-end">読み込み中…</div>
+            </div>
+            <div class="feed-end" id="profile-status" role="status"></div>
         </main>
 
         <aside class="aside" data-shell-aside></aside>
@@ -65,7 +71,7 @@
     <div class="modal" id="edit-modal" hidden>
         <div class="modal-card">
             <div class="modal-head">
-                <button type="button" class="icon-btn" id="edit-cancel" aria-label="閉じる"><i class="fa-solid fa-xmark"></i></button>
+                <button type="button" class="icon-btn" id="edit-cancel" aria-label="閉じる"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
                 <h2>プロフィールを編集</h2>
                 <button type="button" class="btn btn-solid" id="edit-save">保存</button>
             </div>

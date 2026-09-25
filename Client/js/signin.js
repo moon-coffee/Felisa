@@ -27,6 +27,9 @@ regForm.addEventListener("submit", async function (event) {
     if (password === "") {
         regPasswordError.textContent = "パスワードを入力してください。";
         isValid = false;
+    } else if (password.length < 8) {
+        regPasswordError.textContent = "パスワードは8文字以上にしてください。";
+        isValid = false;
     }
 
     if (!isValid) {
@@ -34,6 +37,7 @@ regForm.addEventListener("submit", async function (event) {
     }
 
     regButton.disabled = true;
+    regButton.textContent = "登録中…";
 
     try {
         const res = await fetch("/api/register", {
@@ -68,5 +72,6 @@ regForm.addEventListener("submit", async function (event) {
             "サーバーに接続できませんでした。通信環境を確認してください。";
     } finally {
         regButton.disabled = false;
+        regButton.textContent = "登録";
     }
 });

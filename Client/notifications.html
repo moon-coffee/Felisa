@@ -6,6 +6,8 @@
     <meta name="color-scheme" content="dark">
     <base href="/">
     <style>html,body{background:#252525}</style>
+    <!-- テーマは head の早期に適用する（js/theme.js が data-theme を付与） -->
+    <script src="js/theme.js"></script>
     <!-- リモートCSSは media="print" にして描画をブロックさせない（ページ切替時の白い画面対策）。
          取得完了後に js/defer-css.js が media="all" に戻して適用する。 -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900&display=swap" media="print" data-lazy-css>
@@ -19,9 +21,31 @@
         <header class="sidebar" data-shell-sidebar></header>
 
         <main class="feed">
-            <div class="feed-header"><h1>通知</h1></div>
-            <div id="notif-list"></div>
-            <div class="feed-end" id="notif-status"></div>
+            <div class="feed-header">
+                <div class="feed-header--row">
+                    <h1>通知</h1>
+                    <div class="feed-actions">
+                        <span class="notif-unread" id="notif-unread" hidden></span>
+                        <button type="button" class="btn btn-outline btn-sm" id="notif-read-all">すべて既読</button>
+                    </div>
+                </div>
+                <div class="tabs" role="tablist" aria-label="通知の種類">
+                    <button type="button" class="tab active" role="tab" aria-selected="true"
+                        aria-controls="notif-list" data-filter="all"><span>すべて</span></button>
+                    <button type="button" class="tab" role="tab" aria-selected="false"
+                        aria-controls="notif-list" data-filter="reply"><span>返信</span></button>
+                    <button type="button" class="tab" role="tab" aria-selected="false"
+                        aria-controls="notif-list" data-filter="like"><span>いいね</span></button>
+                    <button type="button" class="tab" role="tab" aria-selected="false"
+                        aria-controls="notif-list" data-filter="repost"><span>リポスト</span></button>
+                    <button type="button" class="tab" role="tab" aria-selected="false"
+                        aria-controls="notif-list" data-filter="follow"><span>フォロー</span></button>
+                </div>
+            </div>
+            <div id="notif-list" role="tabpanel" tabindex="0" aria-label="通知一覧">
+                <div class="feed-end">読み込み中…</div>
+            </div>
+            <div class="feed-end" id="notif-status" role="status"></div>
         </main>
 
         <aside class="aside" data-shell-aside></aside>

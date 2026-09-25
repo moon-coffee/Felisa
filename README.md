@@ -1,6 +1,6 @@
 # Felisa
 
-X（Twitter）風のミニ SNS。**Client / Server 完全分離**構成。本番はさらに **クラウド Gateway / 自宅 Origin** に分離できる（[docs/DEPLOY.md](docs/DEPLOY.md)）。
+X（Twitter）風のミニ SNS。**Client / Server 完全分離**構成。本番はさらに **クラウド Gateway / 自宅 Origin** に分離できる。
 
 - **Client** … 静的な HTML / CSS / ブラウザ JS（`Client/`）。サーバーロジックを持たず、`/api/*` を `fetch` するだけ。
 - **Server** … Node.js + Express。`Client/`（本番は `dist/`）を静的配信 ＋ JSON API。データは `Server/data/` の JSON ファイル。画像は自前 PNG エンコーダ、動画は `ffmpeg`。依存は `express` / `express-rate-limit` のみ。
@@ -10,14 +10,14 @@ X（Twitter）風のミニ SNS。**Client / Server 完全分離**構成。本番
 
 ```bash
 npm install
-npm start           # 開発（Server 単体）  → http://localhost:3000
+npm start           # 開発（Server 単体）  → http://localhost（PORT=3000 npm start で変更可）
 npm run prod        # 本番（Server 単体）  → minify(dist/) + NODE_ENV=production
 npm run build       # dist/ の生成のみ
 npm run gateway      # 開発（Gateway 単体、要 ORIGIN_URL）
 npm run prod:gateway # 本番（Gateway 単体）  → minify(dist/) + NODE_ENV=production
 ```
 
-クラウド Gateway + 自宅 Origin 構成でのデプロイ手順は [docs/DEPLOY.md](docs/DEPLOY.md) を参照。
+クラウド Gateway + 自宅 Origin 構成のデプロイについては、`Gateway/server.js` 冒頭のコメントと `Server/server.js` の `GATEWAY_SECRET` 節を参照（共有シークレットで自宅 Origin への直接アクセスを遮断する）。
 
 動画投稿を使うには `ffmpeg` を PATH に置く（無い場合、動画ボタンは自動的に無効化されます）。
 
@@ -26,16 +26,22 @@ npm run prod:gateway # 本番（Gateway 単体）  → minify(dist/) + NODE_ENV=
 | カテゴリ | 内容 |
 |---|---|
 | アカウント | 登録（＝自動ログイン。**メールアドレス不要・ユーザーID＋パスワードのみ**）/ ログイン / ログアウト、パスワード変更（他端末を失効）、**ユーザー名変更（週1回・全データへ追従）**、**アカウント削除**（関連データをカスケード削除）、ログイン端末・IP・**User-Agent** の一覧と個別/一括ログアウト |
+| 設定 | **外観（ダーク / ライト / 端末に合わせる）**・**プロフィール編集（表示名・自己紹介・リンク）**・**メールアドレス（登録時は不要、あとから任意で登録 / 変更 / 解除。現状は保存のみで送信なし）**・パスワード・ユーザー名・端末管理・アカウント削除を 1 画面に集約 |
 | 管理 | `Server/data/admin.json` に UserID を列挙すると、その人の名前の隣に **Admin ラベル**（投稿・プロフィール・通知・サイドバー） |
 | 投稿 | 本文・**画像最大4枚**（クライアントで PNG 再変換・EXIF 除去）・**動画**（サーバーで MP4/480p 再エンコード・メタデータ削除）・**投票（2〜4択）**・**絵文字ピッカー** |
 | タイムライン | おすすめ / フォロー中、**60秒ごとの「新しいポストをN件表示」**、いいね・リポスト・返信・ブックマーク・共有・自投稿削除 |
-| ソーシャル | フォロー / フォロワー、**ブロック**（タイムライン・検索・プロフィールから除外）、通知（いいね・リポスト・返信・フォロー） |
+| ソーシャル | フォロー / フォロワー、**ブロック**（タイムライン・検索・プロフィールから除外）、通知（いいね・リポスト・返信・フォロー、**種別フィルタ・個別 / 一括既読・未読件数バッジ（ホームで60秒ごとに更新）**） |
 | プロフィール | ヘッダ画像・アイコンの変更、外部リンク、利用開始日、投稿一覧 / いいね一覧 |
-| その他 | **ブックマーク一覧**、キーワード / `#タグ` 検索、**「いま起きていること」（ハッシュタグ集計）** |
-| UX | 確認は画面内モーダル / トースト（`alert` 不使用）、**画像はライトボックスでプレビュー**（遷移しない）、拡張子なしの URL（`/home` `/settings` …）、ページ遷移のちらつき対策 |
+| その他 | **ブックマーク一覧**、キーワード / `#タグ` 検索（**ポスト / ユーザーのタブ切替・フォロー**）、**「いま起きていること」（ハッシュタグ集計）** |
+| UX | 確認は画面内モーダル / トースト（`alert` 不使用）、**画像はライトボックスでプレビュー**（遷移しない）、拡張子なしの URL（`home` `settings` …）、ページ遷移のちらつき対策、**500px 以下のスマートフォン幅ではサイドバーの代わりに下部ナビ＋投稿ボタン（FAB）を表示**、**読み込み中表示と通信断時のエラー表示（無言失敗を解消）**、**テーマ（ダーク / ライト）切替** |
 | セキュリティ | CSP、レート制限（全体500/分・認証系20/分）、CSRF 多層防御、セッショントークンはハッシュ保存＋失効可能、アップロードの型/サイズ/寸法検証、パス・トラバーサル対策、ログイン失敗のアカウント単位ロック・ユーザー存在の時間差判別対策、動画入力の形式検証（ffmpeg の外部参照禁止）、**Gateway 構成では共有シークレット（`GATEWAY_SECRET`）で自宅 Origin への直接アクセスを遮断**、**Tor モードでは `X-Forwarded-For` を信用しない（レート制限キーの IP 偽装を防止／実 IP はシークレット検証済みの `X-Origin-Client-Ip` のみ）**、アップロードはレート制限＋同時実行数の上限＋未参照メディアの自動掃除（7日） |
 
-## ドキュメント
+## アーキテクチャ・API・セキュリティ
 
-データモデル・API 全リファレンス・ルーティング・**Server/Client 分離の確認結果**・セキュリティは [docs/SPEC.md](docs/SPEC.md)。
-クラウド Gateway + 自宅 Origin（Cloudflare Tunnel）構成の本番環境構築手順は [docs/DEPLOY.md](docs/DEPLOY.md)。
+データモデル、API 全リファレンス、ルーティング、セキュリティ上の考慮事項は各コードのコメントを参照。
+
+- データモデル … `Server/userStore.js` / `Server/postStore.js` などの Store 群
+- API … `Server/server.js` のルーティング（`/api/*`）
+- 認証・CSRF … `Server/auth.js`
+- 画像・動画処理 … `Server/media.js`
+- クライアント共通処理（API 呼び出し・トースト・モーダル・テーマ・モバイルナビ） … `Client/js/common.js` / `Client/js/theme.js`

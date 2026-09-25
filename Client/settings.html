@@ -6,6 +6,8 @@
     <meta name="color-scheme" content="dark">
     <base href="/">
     <style>html,body{background:#252525}</style>
+    <!-- テーマは head の早期に適用する（js/theme.js が data-theme を付与） -->
+    <script src="js/theme.js"></script>
     <!-- リモートCSSは media="print" にして描画をブロックさせない（ページ切替時の白い画面対策）。
          取得完了後に js/defer-css.js が media="all" に戻して適用する。 -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900&display=swap" media="print" data-lazy-css>
@@ -22,13 +24,64 @@
             <div class="feed-header"><h1>設定</h1></div>
 
             <section class="settings-sec">
+                <h2>外観（テーマ）</h2>
+                <div class="theme-options" role="radiogroup" aria-label="テーマ">
+                    <label class="theme-option">
+                        <input type="radio" name="theme" value="system"><span>端末に合わせる</span>
+                    </label>
+                    <label class="theme-option">
+                        <input type="radio" name="theme" value="dark"><span>ダーク</span>
+                    </label>
+                    <label class="theme-option">
+                        <input type="radio" name="theme" value="light"><span>ライト</span>
+                    </label>
+                </div>
+                <p class="settings-note">選択内容はこの端末のブラウザに保存されます（サーバーには送信されません）。</p>
+            </section>
+
+            <section class="settings-sec">
+                <h2>プロフィール</h2>
+                <form id="profile-form" class="settings-form">
+                    <label class="field"><span>表示名（50文字まで）</span>
+                        <input type="text" id="pf-name" maxlength="50" autocomplete="nickname"></label>
+                    <label class="field"><span>自己紹介（160文字まで）</span>
+                        <textarea id="pf-bio" rows="3" maxlength="160"></textarea></label>
+                    <label class="field"><span>外部リンク（https:// から始まるURL）</span>
+                        <input type="url" id="pf-link" maxlength="100" placeholder="https://example.com" autocomplete="url"></label>
+                    <div class="settings-err" id="pf-err" role="alert"></div>
+                    <button type="submit" class="btn btn-solid">プロフィールを保存</button>
+                </form>
+                <p class="settings-note">
+                    アイコンとヘッダ画像は、<a class="profile-link-inline" href="/" data-nav="profile">プロフィールページ</a>の「編集」から変更できます。
+                </p>
+            </section>
+
+            <section class="settings-sec">
+                <h2>メールアドレス（任意）</h2>
+                <form id="email-form" class="settings-form">
+                    <label class="field"><span>メールアドレス</span>
+                        <input type="email" id="email-input" maxlength="254"
+                            placeholder="you@example.com" autocomplete="email"></label>
+                    <div class="settings-err" id="email-err" role="alert"></div>
+                    <div class="settings-actions">
+                        <button type="submit" class="btn btn-solid">保存</button>
+                        <button type="button" class="btn btn-outline" id="email-clear" hidden>登録を解除</button>
+                    </div>
+                </form>
+                <p class="settings-note">
+                    登録時にメールアドレスは不要でした。あとからここで追加・変更できます。
+                    現在はメールの送信（通知・パスワード再設定など）は行わないため、取り消してもアカウントの利用に影響しません。
+                </p>
+            </section>
+
+            <section class="settings-sec">
                 <h2>パスワードの変更</h2>
                 <form id="pw-form" class="settings-form">
                     <label class="field"><span>現在のパスワード</span>
                         <input type="password" id="pw-cur" autocomplete="current-password" required></label>
                     <label class="field"><span>新しいパスワード（8文字以上）</span>
                         <input type="password" id="pw-new" autocomplete="new-password" minlength="8" required></label>
-                    <div class="settings-err" id="pw-err"></div>
+                    <div class="settings-err" id="pw-err" role="alert"></div>
                     <button type="submit" class="btn btn-solid">パスワードを変更</button>
                 </form>
                 <p class="settings-note">変更すると、この端末以外はログアウトされます。</p>
@@ -41,7 +94,7 @@
                         <input type="text" id="uname-new" pattern="[A-Za-z0-9_]+" minlength="3" required></label>
                     <label class="field"><span>確認のため現在のパスワード</span>
                         <input type="password" id="uname-pass" autocomplete="current-password" required></label>
-                    <div class="settings-err" id="uname-err"></div>
+                    <div class="settings-err" id="uname-err" role="alert"></div>
                     <button type="submit" class="btn btn-solid" id="uname-btn">ユーザー名を変更</button>
                 </form>
                 <p class="settings-note" id="uname-note">ユーザー名（@ハンドル）の変更は1週間に1回までです。</p>
@@ -49,7 +102,7 @@
 
             <section class="settings-sec">
                 <h2>ログイン中の端末</h2>
-                <div id="sessions"></div>
+                <div id="sessions"><p class="settings-note">読み込み中…</p></div>
                 <button type="button" class="btn btn-outline" id="logout-others">他のすべての端末をログアウト</button>
             </section>
 
@@ -69,14 +122,14 @@
     <div class="modal" id="del-modal" hidden>
         <div class="modal-card">
             <div class="modal-head">
-                <button type="button" class="icon-btn" id="del-cancel" aria-label="閉じる"><i class="fa-solid fa-xmark"></i></button>
+                <button type="button" class="icon-btn" id="del-cancel" aria-label="閉じる"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
                 <h2>アカウントの削除</h2>
                 <span></span>
             </div>
             <p class="modal-msg">確認のため、下の欄に <b>削除</b> と入力し、パスワードを入力してください。</p>
             <label class="field"><span>「削除」と入力</span><input type="text" id="del-confirm" autocomplete="off"></label>
             <label class="field"><span>パスワード</span><input type="password" id="del-pass" autocomplete="current-password"></label>
-            <div class="settings-err" id="del-err"></div>
+            <div class="settings-err" id="del-err" role="alert"></div>
             <div class="modal-actions">
                 <button type="button" class="btn btn-outline" id="del-cancel2">キャンセル</button>
                 <button type="button" class="btn btn-danger" id="del-go" disabled>完全に削除する</button>

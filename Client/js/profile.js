@@ -64,7 +64,9 @@ function renderActions(user) {
                 okText: "解除",
             });
             if (!yes) return;
-            await SNS.api("DELETE", "/api/users/" + encodeURIComponent(segment) + "/block");
+            const res = await SNS.api("DELETE", "/api/users/" + encodeURIComponent(segment) + "/block");
+            if (res.data && res.data.ok) SNS.notify("ブロックを解除しました");
+            else SNS.notify(SNS.failMessage(res.data, "ブロックを解除できませんでした"), "error");
             loadProfile();
         });
         box.appendChild(un);
@@ -76,6 +78,8 @@ function renderActions(user) {
         user.followedByMe ? "btn-outline follow-toggle" : "btn-solid follow-toggle"
     );
     follow.dataset.following = user.followedByMe ? "1" : "0";
+    follow.setAttribute("aria-pressed", user.followedByMe ? "true" : "false");
+    follow.setAttribute("aria-label", (user.followedByMe ? "フォロー中（解除）: " : "フォロー: ") + user.name);
     follow.addEventListener("click", () => toggleFollow(follow));
     box.appendChild(follow);
 
@@ -95,8 +99,9 @@ function renderActions(user) {
             danger: true,
         });
         if (!yes) return;
-        await SNS.api("POST", "/api/users/" + encodeURIComponent(segment) + "/block");
-        SNS.notify("ブロックしました");
+        const res = await SNS.api("POST", "/api/users/" + encodeURIComponent(segment) + "/block");
+        if (res.data && res.data.ok) SNS.notify("ブロックしました");
+        else SNS.notify(SNS.failMessage(res.data, "ブロックできませんでした"), "error");
         loadProfile();
     });
     box.appendChild(menu);
@@ -110,13 +115,14 @@ async function toggleFollow(btn) {
     );
     if (res.status === 401) return (location.href = "/login");
     if (!res.data.ok) {
-        SNS.notify((res.data.errors && res.data.errors.form) || "操作できませんでした", "error");
+        SNS.notify(SNS.failMessage(res.data, "操作できませんでした"), "error");
         return;
     }
     btn.dataset.following = res.data.following ? "1" : "0";
     btn.textContent = res.data.following ? "フォロー中" : "フォロー";
     btn.className =
         "btn follow-toggle " + (res.data.following ? "btn-outline" : "btn-solid");
+    btn.setAttribute("aria-pressed", res.data.following ? "true" : "false");
     document.querySelector("[data-stat-followers]").textContent = res.data.followerCount;
 }
 
@@ -190,9 +196,15 @@ async function loadList() {
         currentTab === "likes"
             ? "/api/users/" + encodeURIComponent(segment) + "/likes"
             : "/api/users/" + encodeURIComponent(segment) + "/posts";
+    listEl.innerHTML = '<div class="feed-end">読み込み中…</div>';
+    statusEl.textContent = "";
     const res = await SNS.api("GET", path);
     listEl.innerHTML = "";
-    const entries = (res.data && res.data.entries) || [];
+    if (!res.data || !res.data.ok) {
+        statusEl.textContent = SNS.failMessage(res.data, "一覧を読み込めませんでした。");
+        return;
+    }
+    const entries = res.data.entries || [];
     if (entries.length === 0) {
         statusEl.textContent =
             currentTab === "likes" ? "いいねしたポストはありません。" : "まだポストがありません。";
@@ -203,9 +215,12 @@ async function loadList() {
 }
 
 async function loadProfile() {
+    listEl.innerHTML = '<div class="feed-end">読み込み中…</div>';
     const res = await SNS.api("GET", "/api/users/" + encodeURIComponent(segment));
     if (!res.data || !res.data.ok || !res.data.user) {
         renderMissing();
+        if (res.status === 0)
+            statusEl.textContent = "サーバーに接続できませんでした。通信環境を確認してください。";
         return;
     }
     const user = res.data.user;
@@ -224,9 +239,11 @@ async function loadProfile() {
 document.querySelectorAll("#profile-tabs .tab").forEach((tab) => {
     tab.addEventListener("click", () => {
         if (tab.classList.contains("active")) return;
-        document
-            .querySelectorAll("#profile-tabs .tab")
-            .forEach((t) => t.classList.toggle("active", t === tab));
+        document.querySelectorAll("#profile-tabs .tab").forEach((t) => {
+            const on = t === tab;
+            t.classList.toggle("active", on);
+            t.setAttribute("aria-selected", on ? "true" : "false");
+        });
         currentTab = tab.dataset.tab;
         loadList();
     });
@@ -247,10 +264,24 @@ function openEdit(user) {
     avatarPrev.style.backgroundImage = "url(" + user.avatar + ")";
     headerPrev.style.backgroundImage = user.header ? "url(" + user.header + ")" : "";
     modal.hidden = false;
+    // role / Escape / フォーカストラップ / 開く前へのフォーカス復帰
+    editRestore = SNS.dialogize(modal, closeEdit);
+    document.getElementById("edit-name").focus();
 }
-document.getElementById("edit-cancel").addEventListener("click", () => (modal.hidden = true));
+
+let editRestore = null;
+
+function closeEdit() {
+    if (editRestore) {
+        editRestore();
+        editRestore = null;
+    }
+    modal.hidden = true;
+}
+
+document.getElementById("edit-cancel").addEventListener("click", closeEdit);
 modal.addEventListener("click", (e) => {
-    if (e.target === modal) modal.hidden = true;
+    if (e.target === modal) closeEdit();
 });
 document
     .getElementById("edit-avatar-btn")
@@ -286,43 +317,51 @@ document.getElementById("edit-header-file").addEventListener("change", async (e)
 
 document.getElementById("edit-save").addEventListener("click", async () => {
     const btn = document.getElementById("edit-save");
+    const idleLabel = btn.textContent;
     btn.disabled = true;
+    btn.textContent = "保存中…";
     let imageChanged = false;
 
-    const res = await SNS.api("PUT", "/api/me", {
-        displayName: document.getElementById("edit-name").value,
-        bio: document.getElementById("edit-bio").value,
-        link: document.getElementById("edit-link").value,
-    });
-    if (res.status === 401) return (location.href = "/login");
-
-    if (pendingAvatar) {
-        const a = await SNS.api("PUT", "/api/me/avatar", pendingAvatar.blob, {
-            raw: true,
-            contentType: "image/png",
+    try {
+        const res = await SNS.api("PUT", "/api/me", {
+            displayName: document.getElementById("edit-name").value,
+            bio: document.getElementById("edit-bio").value,
+            link: document.getElementById("edit-link").value,
         });
-        if (a.data.ok) imageChanged = true;
-        else SNS.notify((a.data.errors && a.data.errors.form) || "アイコンを更新できませんでした", "error");
-    }
-    if (pendingHeader) {
-        const hres = await SNS.api("PUT", "/api/me/header", pendingHeader.blob, {
-            raw: true,
-            contentType: "image/png",
-        });
-        if (hres.data.ok) imageChanged = true;
-        else SNS.notify((hres.data.errors && hres.data.errors.form) || "ヘッダを更新できませんでした", "error");
-    }
+        if (res.status === 401) return (location.href = "/login");
 
-    btn.disabled = false;
-    if (res.data.ok || imageChanged) {
-        modal.hidden = true;
-        SNS.notify("プロフィールを更新しました");
-        if (imageChanged) {
-            location.reload();
-        } else {
-            SNS.applyShellUser(await SNS.loadMe());
-            loadProfile();
+        if (pendingAvatar) {
+            const a = await SNS.api("PUT", "/api/me/avatar", pendingAvatar.blob, {
+                raw: true,
+                contentType: "image/png",
+            });
+            if (a.data.ok) imageChanged = true;
+            else SNS.notify(SNS.failMessage(a.data, "アイコンを更新できませんでした"), "error");
         }
+        if (pendingHeader) {
+            const hres = await SNS.api("PUT", "/api/me/header", pendingHeader.blob, {
+                raw: true,
+                contentType: "image/png",
+            });
+            if (hres.data.ok) imageChanged = true;
+            else SNS.notify(SNS.failMessage(hres.data, "ヘッダを更新できませんでした"), "error");
+        }
+
+        if (res.data.ok || imageChanged) {
+            closeEdit();
+            SNS.notify("プロフィールを更新しました");
+            if (imageChanged) {
+                location.reload();
+            } else {
+                SNS.applyShellUser(await SNS.loadMe());
+                loadProfile();
+            }
+        } else {
+            SNS.notify(SNS.failMessage(res.data, "プロフィールを保存できませんでした"), "error");
+        }
+    } finally {
+        btn.textContent = idleLabel;
+        btn.disabled = false;
     }
 });
 

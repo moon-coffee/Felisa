@@ -114,9 +114,12 @@ function publicProfile(user, viewerId) {
     };
 }
 
+// 自分宛ての応答にだけ使う表現。メールアドレスは自分以外へは絶対に渡さない
+// （publicProfile には email を含めないこと）。
 function selfUser(user) {
     return {
         ...publicProfile(user, user.userId),
+        email: user.email || "",
         usernameNextChangeAt: users.usernameChangeAvailableAt(user.userId),
     };
 }

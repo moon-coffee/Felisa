@@ -33,21 +33,42 @@ function decorate(row) {
     };
 }
 
+// 通知の種別（GET /?filter= の対象）。これ以外の値は all 扱い。
+const FILTER_TYPES = new Set(["like", "repost", "reply", "follow"]);
+
 router.get("/", (req, res) => {
     const user = requireAuth(req, res);
     if (!user) return;
+    const requested = typeof req.query.filter === "string" ? req.query.filter : "";
+    const filter = FILTER_TYPES.has(requested) ? requested : "all";
+
+    // 既読処理は行わない（未読のまま返す）。既読化は POST /read のみで行い、
+    // 未読件数は GET /api/me の unreadNotifications と常に一致させる。
+    const rows = notificationStore.listFor(user.userId);
+    const visible = filter === "all" ? rows : rows.filter((r) => r.type === filter);
     return res.json({
         ok: true,
-        notifications: notificationStore.listFor(user.userId).map(decorate),
+        filter,
+        notifications: visible.map(decorate),
         unreadCount: notificationStore.unreadCount(user.userId),
     });
 });
 
+// body.id を指定すればその1件だけ、無ければ（{} / null でも）全件を既読にする
 router.post("/read", (req, res) => {
     const user = requireAuth(req, res);
     if (!user) return;
-    notificationStore.markAllRead(user.userId);
-    return res.json({ ok: true });
+    const body = req.body || {};
+    const id = typeof body.id === "string" && body.id !== "" ? body.id : null;
+    if (id) {
+        notificationStore.markRead(user.userId, id); // 無い/他人の1件は無視される
+    } else {
+        notificationStore.markAllRead(user.userId);
+    }
+    return res.json({
+        ok: true,
+        unreadCount: notificationStore.unreadCount(user.userId),
+    });
 });
 
 module.exports = router;

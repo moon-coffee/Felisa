@@ -24,6 +24,9 @@ function normalize(u) {
         displayName,
         bio: typeof u.bio === "string" ? u.bio : "",
         link: typeof u.link === "string" ? u.link : "",
+        // メールアドレスは任意（未登録は空文字）。purgeLegacyMail は旧 mail 専用なので
+        // こちらは保持して渡す。
+        email: typeof u.email === "string" ? u.email : "",
         hasHeader: u.hasHeader === true,
         userIdChangedAt: typeof u.userIdChangedAt === "number" ? u.userIdChangedAt : null,
     };
@@ -60,7 +63,8 @@ function verifyPassword(password, stored) {
     return crypto.timingSafeEqual(storedBuf, derived);
 }
 
-// メールアドレス機能の廃止に伴い、既存データに残った mail を起動時に消去する
+// 旧 mail フィールド（現在の email とは別物）は起動時に消去する。
+// 新しい email は任意項目として保持する。
 (function purgeLegacyMail() {
     const raw = readArray(USERS_FILE);
     if (raw.some((u) => u && "mail" in u)) writeUsers(raw.map(normalize));
@@ -79,6 +83,20 @@ function findByUserId(userId) {
     return readUsers().find((u) => lc(u.userId) === lc(userId));
 }
 
+// userId / displayName の部分一致でユーザーを検索する（大文字小文字は無視）。
+// hidden（blocks.hiddenFor の集合）に入っている ID は、自分がブロックした／
+// ブロックされた双方の方向で対象外になる。表示上限は呼び出し側で切る。
+function searchUsers(query, hidden = null) {
+    const q = String(query).trim();
+    if (q === "") return [];
+    const needle = lc(q);
+    return readUsers().filter(
+        (u) =>
+            !(hidden && hidden.has(lc(u.userId))) &&
+            (lc(u.userId).includes(needle) || lc(u.displayName).includes(needle))
+    );
+}
+
 function createUser({ userId, password }) {
     const users = readUsers();
     const user = {
@@ -88,6 +106,7 @@ function createUser({ userId, password }) {
         displayName: userId,
         bio: "",
         link: "",
+        email: "",
         hasHeader: false,
         userIdChangedAt: null,
     };
@@ -118,6 +137,13 @@ function updateProfile(userId, patch) {
             const link = patch.link.trim().slice(0, LINK_MAX);
             u.link = /^https?:\/\/[^\s]+$/i.test(link) ? link : "";
         }
+    });
+}
+
+// メールアドレスの登録・変更・解除（空文字なら解除）。送信は行わない保存のみ。
+function setEmail(userId, email) {
+    return mutate(userId, (u) => {
+        u.email = email;
     });
 }
 
@@ -183,8 +209,10 @@ function renameUser(oldId, newId) {
 
 module.exports = {
     findByUserId,
+    searchUsers,
     createUser,
     updateProfile,
+    setEmail,
     setPassword,
     setHeader,
     deleteUser,

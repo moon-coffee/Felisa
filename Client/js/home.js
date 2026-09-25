@@ -24,7 +24,7 @@ async function loadFeed() {
         return;
     }
     if (!res.data.ok) {
-        statusEl.textContent = "読み込みに失敗しました。";
+        statusEl.textContent = SNS.failMessage(res.data, "読み込みに失敗しました。");
         return;
     }
     const entries = res.data.entries || [];
@@ -69,13 +69,21 @@ newBtn.addEventListener("click", () => {
 document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => {
         if (tab.classList.contains("active")) return;
-        document
-            .querySelectorAll(".tab")
-            .forEach((t) => t.classList.toggle("active", t === tab));
+        document.querySelectorAll(".tab").forEach((t) => {
+            const on = t === tab;
+            t.classList.toggle("active", on);
+            t.setAttribute("aria-selected", on ? "true" : "false");
+        });
         feed = tab.dataset.feed;
         loadFeed();
     });
 });
+
+// 通知バッジを最新に保つ（60秒ごと）
+async function refreshBadge() {
+    const res = await SNS.api("GET", "/api/me");
+    if (res.data && res.data.ok) SNS.setBadge(res.data.unreadNotifications || 0);
+}
 
 SNS.wire(document.querySelector(".feed"));
 SNS.mountShell("home");
@@ -86,4 +94,7 @@ SNS.setupComposer(document.getElementById("composer"), (post) => {
 });
 
 loadFeed();
-setInterval(pollNew, 60 * 1000);
+setInterval(() => {
+    pollNew();
+    refreshBadge();
+}, 60 * 1000);

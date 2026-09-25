@@ -75,6 +75,23 @@ function markAllRead(userId) {
     }
 }
 
+// 指定した1件だけ既読にする（受信者本人のものだけが対象）。
+// 無い ID や他人の通知は無視される（false を返す）。
+function markRead(userId, id) {
+    const rows = readAll();
+    let changed = false;
+    for (const r of rows) {
+        if (eq(r.userId, userId) && r.id === id && !r.read) {
+            r.read = true;
+            changed = true;
+        }
+    }
+    if (changed) {
+        writeAll(rows);
+    }
+    return changed;
+}
+
 // 投稿削除時に、その投稿に紐づく通知を除去
 function removeForPosts(postIds) {
     const set = new Set(postIds);
@@ -109,6 +126,7 @@ module.exports = {
     listFor,
     unreadCount,
     markAllRead,
+    markRead,
     removeForPosts,
     removeForUser,
     renameUser,

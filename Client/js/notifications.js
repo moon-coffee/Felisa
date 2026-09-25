@@ -2,6 +2,8 @@
 
 const listEl = document.getElementById("notif-list");
 const statusEl = document.getElementById("notif-status");
+const unreadEl = document.getElementById("notif-unread");
+const readAllBtn = document.getElementById("notif-read-all");
 
 const LABEL = {
     like: "さんがあなたのポストをいいねしました",
@@ -16,16 +18,43 @@ const ICON = {
     follow: "fa-solid fa-user-plus notif-icon--follow",
 };
 
+let filter = "all";
+let unreadCount = 0;
+
+function updateUnreadUi() {
+    if (unreadCount > 0) {
+        unreadEl.hidden = false;
+        unreadEl.textContent = "未読 " + unreadCount + "件";
+    } else {
+        unreadEl.hidden = true;
+    }
+    readAllBtn.disabled = unreadCount === 0;
+    SNS.setBadge(unreadCount);
+}
+
+// 1件だけ既読にする（ページ遷移前でも送り切れるよう keepalive）
+async function markRead(id) {
+    const res = await SNS.api("POST", "/api/notifications/read", { id }, { keepalive: true });
+    if (res.data && res.data.ok) {
+        if (typeof res.data.unreadCount === "number") unreadCount = res.data.unreadCount;
+        updateUnreadUi();
+    }
+}
+
 function renderNotif(n) {
     const a = document.createElement("a");
     a.className = "notif" + (n.read ? "" : " notif--unread");
     if (n.type === "follow") a.href = "/" + encodeURIComponent(n.actor.userId);
     else if (n.post) a.href = "/status/" + encodeURIComponent(n.post.id);
     else a.href = "#";
+    if (!n.read) {
+        // 未読の通知を開いたらその1件だけ既読にする（遷移は止めない）
+        a.addEventListener("click", () => markRead(n.id));
+    }
 
     const icon = document.createElement("div");
     icon.className = "notif-icon";
-    icon.innerHTML = '<i class="' + (ICON[n.type] || "fa-solid fa-bell") + '"></i>';
+    icon.innerHTML = '<i class="' + (ICON[n.type] || "fa-solid fa-bell") + '" aria-hidden="true"></i>';
 
     const body = document.createElement("div");
     body.className = "notif-body";
@@ -45,7 +74,7 @@ function renderNotif(n) {
     }
     const time = document.createElement("div");
     time.className = "notif-time";
-    time.textContent = SNS.relativeTime(n.createdAt);
+    time.textContent = SNS.relativeTime(n.createdAt) + (n.read ? "" : " · 未読");
     body.appendChild(time);
 
     a.append(icon, body);
@@ -53,22 +82,60 @@ function renderNotif(n) {
 }
 
 async function load() {
-    const res = await SNS.api("GET", "/api/notifications");
+    listEl.innerHTML = '<div class="feed-end">読み込み中…</div>';
+    statusEl.textContent = "";
+    const res = await SNS.api("GET", "/api/notifications?filter=" + encodeURIComponent(filter));
     if (res.status === 401) {
         location.replace("/login");
         return;
     }
     listEl.innerHTML = "";
-    const items = (res.data && res.data.notifications) || [];
-    if (items.length === 0) {
-        statusEl.textContent = "通知はまだありません。";
-    } else {
-        statusEl.textContent = "";
-        for (const n of items) listEl.appendChild(renderNotif(n));
+    if (!res.data || !res.data.ok) {
+        statusEl.textContent = SNS.failMessage(res.data, "通知を読み込めませんでした。");
+        return;
     }
-    await SNS.api("POST", "/api/notifications/read");
-    SNS.setBadge(0);
+    const items = res.data.notifications || [];
+    unreadCount = typeof res.data.unreadCount === "number" ? res.data.unreadCount : 0;
+    updateUnreadUi();
+
+    if (items.length === 0) {
+        statusEl.textContent =
+            filter === "all" ? "通知はまだありません。" : "この種類の通知はありません。";
+        return;
+    }
+    for (const n of items) listEl.appendChild(renderNotif(n));
 }
+
+/* ---- 種別フィルタ ---- */
+document.querySelectorAll("[data-filter]").forEach((tab) => {
+    tab.addEventListener("click", () => {
+        filter = tab.dataset.filter;
+        document.querySelectorAll("[data-filter]").forEach((t) => {
+            const on = t === tab;
+            t.classList.toggle("active", on);
+            t.setAttribute("aria-selected", on ? "true" : "false");
+        });
+        load();
+    });
+});
+
+/* ---- すべて既読 ---- */
+readAllBtn.addEventListener("click", async () => {
+    readAllBtn.disabled = true;
+    const res = await SNS.api("POST", "/api/notifications/read", {});
+    if (res.data && res.data.ok) {
+        unreadCount = typeof res.data.unreadCount === "number" ? res.data.unreadCount : 0;
+        updateUnreadUi();
+        listEl.querySelectorAll(".notif--unread").forEach((el) => el.classList.remove("notif--unread"));
+        listEl.querySelectorAll(".notif-time").forEach((el) => {
+            el.textContent = el.textContent.replace(" · 未読", "");
+        });
+        SNS.notify("すべての通知を既読にしました");
+    } else {
+        readAllBtn.disabled = false;
+        SNS.notify(SNS.failMessage(res.data, "既読にできませんでした"), "error");
+    }
+});
 
 SNS.mountShell("notifications");
 load();

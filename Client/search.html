@@ -6,6 +6,8 @@
     <meta name="color-scheme" content="dark">
     <base href="/">
     <style>html,body{background:#252525}</style>
+    <!-- テーマは head の早期に適用する（js/theme.js が data-theme を付与） -->
+    <script src="js/theme.js"></script>
     <!-- リモートCSSは media="print" にして描画をブロックさせない（ページ切替時の白い画面対策）。
          取得完了後に js/defer-css.js が media="all" に戻して適用する。 -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900&display=swap" media="print" data-lazy-css>
@@ -19,16 +21,24 @@
         <header class="sidebar" data-shell-sidebar></header>
 
         <main class="feed">
-            <div class="feed-header feed-header--row">
-                <a href="/home" class="icon-btn" aria-label="戻る"><i class="fa-solid fa-arrow-left"></i></a>
-                <form class="search search--grow" data-search-form>
-                    <i class="fa-solid fa-magnifying-glass"></i>
-                    <input type="search" id="search-input" placeholder="検索" aria-label="検索">
-                </form>
+            <div class="feed-header">
+                <div class="feed-header--row">
+                    <a href="/home" class="icon-btn" aria-label="戻る"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i></a>
+                    <form class="search search--grow" data-search-form role="search">
+                        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                        <input type="search" id="search-input" name="q" placeholder="検索" aria-label="検索">
+                    </form>
+                </div>
+                <div class="tabs" role="tablist" aria-label="検索結果の種類" id="search-tabs" hidden>
+                    <button type="button" class="tab active" role="tab" aria-selected="true"
+                        aria-controls="search-list" data-kind="posts"><span>ポスト</span></button>
+                    <button type="button" class="tab" role="tab" aria-selected="false"
+                        aria-controls="search-list" data-kind="users"><span>ユーザー</span></button>
+                </div>
             </div>
 
-            <div id="search-list"></div>
-            <div class="feed-end" id="search-status"></div>
+            <div id="search-list" role="tabpanel" tabindex="0" aria-label="検索結果"></div>
+            <div class="feed-end" id="search-status" role="status"></div>
         </main>
 
         <aside class="aside" data-shell-aside></aside>
