@@ -12,6 +12,19 @@ function alreadyShown(id) {
     return !!listEl.querySelector('[data-id="' + CSS.escape(id) + '"]');
 }
 
+// 1件の描画失敗でタイムライン全体が消えないようにする。
+// renderEntry が例外を投げると loadFeed のループが止まり、
+// 「サーバーには存在するのに画面に一切出ない」状態になるため、
+// 失敗した1件だけを落としてコンソールに残す。
+function renderSafely(entry) {
+    try {
+        return SNS.renderEntry(entry);
+    } catch (e) {
+        console.error("ポストの描画に失敗しました", entry, e);
+        return null;
+    }
+}
+
 async function loadFeed() {
     listEl.innerHTML = "";
     statusEl.textContent = "読み込み中…";
@@ -37,7 +50,10 @@ async function loadFeed() {
         return;
     }
     statusEl.textContent = "";
-    for (const entry of entries) listEl.appendChild(SNS.renderEntry(entry));
+    for (const entry of entries) {
+        const el = renderSafely(entry);
+        if (el) listEl.appendChild(el);
+    }
 }
 
 async function pollNew() {
@@ -56,13 +72,17 @@ async function pollNew() {
 }
 
 newBtn.addEventListener("click", () => {
-    for (let i = stash.length - 1; i >= 0; i--) {
-        listEl.prepend(SNS.renderEntry(stash[i]));
-    }
-    if (stash.length) newestSortAt = stash[0].sortAt;
+    // 先に状態を更新してから描画する（描画が失敗しても
+    // ボタンが残り続けて押しても反応しない、という現象を防ぐ）
+    const shown = stash;
     stash = [];
+    if (shown.length) newestSortAt = shown[0].sortAt;
     newBtn.hidden = true;
     statusEl.textContent = "";
+    for (let i = shown.length - 1; i >= 0; i--) {
+        const el = renderSafely(shown[i]);
+        if (el) listEl.prepend(el);
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
 });
 
@@ -88,9 +108,10 @@ async function refreshBadge() {
 SNS.wire(document.querySelector(".feed"));
 SNS.mountShell("home");
 SNS.setupComposer(document.getElementById("composer"), (post) => {
-    listEl.prepend(SNS.renderEntry({ kind: "post", post }));
-    newestSortAt = Math.max(newestSortAt, post.createdAt);
+    newestSortAt = Math.max(newestSortAt, (post && post.createdAt) || 0);
     statusEl.textContent = "";
+    const el = renderSafely({ kind: "post", post });
+    if (el) listEl.prepend(el);
 });
 
 loadFeed();

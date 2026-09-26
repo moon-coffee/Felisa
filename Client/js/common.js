@@ -416,7 +416,8 @@
         const total = poll.totalVotes;
         const done = poll.closed || poll.myVote !== null;
 
-        poll.options.forEach((opt, i) => {
+        const options = Array.isArray(poll.options) ? poll.options : [];
+        options.forEach((opt, i) => {
             if (done) {
                 const pct = total ? Math.round((opt.votes / total) * 100) : 0;
                 const row = document.createElement("div");
@@ -455,25 +456,27 @@
     // link:false のときは外側のモーダル（引用作成時）用に要素だけ作る
     function quoteCard(post, opts) {
         opts = opts || {};
+        post = post || {};
+        const author = safeAuthor(post.author);
         const card = document.createElement(opts.link === false ? "div" : "a");
         card.className = "quote-card";
-        card.dataset.quoteId = post.id;
+        card.dataset.quoteId = post.id || "";
         if (opts.link !== false) {
-            card.href = "/status/" + encodeURIComponent(post.id);
-            card.setAttribute("aria-label", post.author.name + " のポストを表示");
+            card.href = "/status/" + encodeURIComponent(post.id || "");
+            card.setAttribute("aria-label", author.name + " のポストを表示");
         }
 
         const head = document.createElement("div");
         head.className = "quote-head";
         const av = document.createElement("span");
         av.className = "avatar avatar--sm quote-avatar";
-        av.appendChild(SNS.imgFor(post.author));
+        av.appendChild(SNS.imgFor(author));
         const name = document.createElement("b");
         name.className = "quote-name";
-        name.textContent = post.author.name;
+        name.textContent = author.name;
         const handle = document.createElement("span");
         handle.className = "quote-handle";
-        handle.textContent = post.author.handle;
+        handle.textContent = author.handle;
         const time = document.createElement("span");
         time.className = "quote-time";
         time.textContent = "· " + SNS.relativeTime(post.createdAt);
@@ -521,6 +524,15 @@
     }
     SNS.quoteCard = quoteCard;
 
+    // 作者情報が欠損していても描画が落ちないよう、既定値で補う。
+    // renderEntry はタイムラインの全件を描画する関数なので、1件の例外で
+    // ループが止まると「サーバーには存在するのに画面に1件も出ない」事態になる。
+    function safeAuthor(a) {
+        if (a && typeof a === "object") return a;
+        return { userId: "", name: "不明なユーザー", handle: "", avatar: null, isAdmin: false };
+    }
+    SNS.safeAuthor = safeAuthor;
+
     // 自分の投稿をタイムラインの先頭に入れる（存在するページのみ）
     SNS.prependEntry = function (entry) {
         const list = document.getElementById("feed-list");
@@ -529,12 +541,13 @@
 
     SNS.renderEntry = function (entry, opts) {
         opts = opts || {};
-        const post = entry.post || entry;
-        const repostedBy = entry.kind === "repost" ? entry.repostedBy : null;
+        const post = (entry && entry.post) || entry || {};
+        const repostedBy = entry && entry.kind === "repost" ? entry.repostedBy : null;
+        const author = safeAuthor(post.author);
 
         const article = document.createElement("article");
         article.className = "post" + (opts.detail ? " post--detail" : "");
-        article.dataset.id = post.id;
+        article.dataset.id = post.id || "";
         article.dataset.mine = post.mine ? "1" : "0";
         // 操作ダイアログ（引用など）から元データに辿り着けるようにする
         article.__post = post;
@@ -552,10 +565,10 @@
         row.className = "post-row";
         const avatarLink = document.createElement("a");
         avatarLink.className = "post-avatar";
-        avatarLink.href = "/" + encodeURIComponent(post.author.userId);
+        avatarLink.href = "/" + encodeURIComponent(author.userId || "");
         const avatar = document.createElement("span");
         avatar.className = "avatar";
-        avatar.appendChild(SNS.imgFor(post.author));
+        avatar.appendChild(SNS.imgFor(author));
         avatarLink.appendChild(avatar);
         row.appendChild(avatarLink);
 
@@ -566,13 +579,13 @@
         head.className = "post-head";
         const nameLink = document.createElement("a");
         nameLink.className = "post-name";
-        nameLink.href = "/" + encodeURIComponent(post.author.userId);
-        nameLink.textContent = post.author.name;
+        nameLink.href = "/" + encodeURIComponent(author.userId || "");
+        nameLink.textContent = author.name;
         head.appendChild(nameLink);
-        if (post.author.isAdmin) head.appendChild(SNS.adminBadge());
+        if (author.isAdmin) head.appendChild(SNS.adminBadge());
         const handle = document.createElement("span");
         handle.className = "post-handle";
-        handle.textContent = post.author.handle;
+        handle.textContent = author.handle;
         head.appendChild(handle);
         if (!opts.detail) {
             const dot = document.createElement("span");
