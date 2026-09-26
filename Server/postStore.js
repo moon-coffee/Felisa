@@ -18,6 +18,11 @@ function normalize(p) {
         text: p.text,
         createdAt: p.createdAt,
         replyTo: p.replyTo || null,
+        // 引用元ポスト（引用リポスト時のみ）
+        quoteOf: p.quoteOf || null,
+        // Llama Guard による自動モデレーション結果
+        // { state: "safe"|"pending", at, categories: [] }
+        moderation: p.moderation && typeof p.moderation === "object" ? p.moderation : null,
         likes: Array.isArray(p.likes) ? p.likes : [],
         reposts: Array.isArray(p.reposts) ? p.reposts : [],
         media: Array.isArray(p.media) ? p.media : [],
@@ -74,7 +79,15 @@ function buildPoll(poll) {
     };
 }
 
-function create({ userId, text, replyTo = null, media = [], poll = null }) {
+function create({
+    userId,
+    text,
+    replyTo = null,
+    media = [],
+    poll = null,
+    quoteOf = null,
+    moderation = null,
+}) {
     const posts = readPosts();
     const post = {
         id: crypto.randomUUID(),
@@ -82,6 +95,8 @@ function create({ userId, text, replyTo = null, media = [], poll = null }) {
         text,
         createdAt: Date.now(),
         replyTo: replyTo || null,
+        quoteOf: quoteOf || null,
+        moderation: moderation || null,
         likes: [],
         reposts: [],
         media: Array.isArray(media) ? media.slice(0, 4) : [],
@@ -90,6 +105,21 @@ function create({ userId, text, replyTo = null, media = [], poll = null }) {
     posts.push(post);
     writePosts(posts);
     return post;
+}
+
+// 全投稿（返信・引用込み）。モデレーションの再スキャン用。
+function listAll() {
+    return readPosts();
+}
+
+// モデレーション結果の記録
+function setModeration(id, info) {
+    const posts = readPosts();
+    const post = posts.find((p) => p.id === id);
+    if (!post) return null;
+    post.moderation = info || null;
+    writePosts(posts);
+    return post.moderation;
 }
 
 // 既にいずれかの投稿に添付されているメディアか
@@ -122,6 +152,12 @@ function remove(id) {
     }
     const gone = posts.filter((p) => removed.has(p.id));
     const kept = posts.filter((p) => !removed.has(p.id));
+    // 引用ポストが消えると、元ポスト側に残っている「その引用によるリポスト」記録も
+    // 一緒に外す（引用を削除したのにリポスト件数だけ残るのを防ぐ）。
+    for (const p of kept) {
+        const next = p.reposts.filter((r) => !(r.viaPostId && removed.has(r.viaPostId)));
+        if (next.length !== p.reposts.length) p.reposts = next;
+    }
     writePosts(kept);
     // 他の投稿がまだ参照しているメディアは消さない
     const stillUsed = new Set(collectMediaIds(kept));
@@ -215,14 +251,20 @@ function setLike(id, userId, on) {
     return { liked: on, likeCount: post.likes.length };
 }
 
-function setRepost(id, userId, on) {
+// 引用リポスト経由の場合 viaPostId（引用ポストの ID）を渡す。
+// その記録は引用ポストが削除されたとき（remove）に自動で外される。
+// 既にリポスト済みの場合は viaPostId を上書きしない
+// （先に素のリポストをしてから引用した場合、引用を消しても素のリポストは残すため）。
+function setRepost(id, userId, on, viaPostId = null) {
     const posts = readPosts();
     const post = posts.find((p) => p.id === id);
     if (!post) return null;
     const key = String(userId).toLowerCase();
-    const has = post.reposts.some((r) => String(r.userId).toLowerCase() === key);
-    if (on && !has) post.reposts.push({ userId, createdAt: Date.now() });
-    else if (!on && has)
+    const idx = post.reposts.findIndex((r) => String(r.userId).toLowerCase() === key);
+    if (on && idx === -1) post.reposts.push({ userId, createdAt: Date.now(), viaPostId: viaPostId || null });
+    else if (on && idx !== -1 && viaPostId && !post.reposts[idx].viaPostId)
+        post.reposts[idx].viaPostId = viaPostId;
+    else if (!on && idx !== -1)
         post.reposts = post.reposts.filter(
             (r) => String(r.userId).toLowerCase() !== key
         );
@@ -351,6 +393,8 @@ module.exports = {
     get,
     mediaInUse,
     create,
+    listAll,
+    setModeration,
     remove,
     listTimeline,
     listByAuthor,

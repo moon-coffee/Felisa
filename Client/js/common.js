@@ -65,23 +65,48 @@
         return "残り" + Math.floor(h / 24) + "日";
     };
     SNS.imgFor = function (user) {
+        // アイコン未設定（システム通知の発行者など）は既定アイコンを返す
+        if (!user || !user.avatar) {
+            const i = document.createElement("i");
+            i.className = "fa-solid fa-shield-halved";
+            i.setAttribute("aria-hidden", "true");
+            return i;
+        }
         const img = document.createElement("img");
         img.src = user.avatar;
         img.alt = user.name || "";
         img.decoding = "async";
         return img;
     };
+    // ポスト本文中の URL / #ハッシュタグ をリンク化する。
+    // URL はいきなり外部を開かせず、必ずサーバーのチェックページ（/out）を通す。
     SNS.linkify = function (target, text) {
         target.textContent = "";
-        const re = /#([\p{L}\p{N}_]+)/gu;
+        const re = /(https?:\/\/[^\s<>"'`]+)|#([\p{L}\p{N}_]+)/gu;
         let last = 0, m;
         while ((m = re.exec(text)) !== null) {
             if (m.index > last)
                 target.appendChild(document.createTextNode(text.slice(last, m.index)));
+            if (m[1]) {
+                const raw = m[1];
+                // 文末の句読点は URL に含めない
+                const url = raw.replace(/[),.;:!?'"\]]+$/, "");
+                const trailing = raw.slice(url.length);
+                const a = document.createElement("a");
+                a.className = "post-link";
+                a.href = "/out?to=" + encodeURIComponent(url);
+                a.target = "_blank";
+                a.rel = "noopener noreferrer nofollow";
+                a.textContent = url.replace(/^https?:\/\//i, "");
+                target.appendChild(a);
+                if (trailing) target.appendChild(document.createTextNode(trailing));
+                last = m.index + raw.length;
+                continue;
+            }
             const a = document.createElement("a");
             a.className = "hashtag";
-            a.href = "/search?q=" + encodeURIComponent("#" + m[1]);
-            a.textContent = "#" + m[1];
+            a.href = "/search?q=" + encodeURIComponent("#" + m[2]);
+            a.textContent = "#" + m[2];
             target.appendChild(a);
             last = m.index + m[0].length;
         }
@@ -200,6 +225,65 @@
                 if (e.target === back) close(false);
             });
             okBtn.focus();
+        });
+    };
+
+    // 選択肢を並べたモーダル（リポスト / 引用の選択など）。
+    // items: [{ label, value, kind: "solid"|"outline"|"danger" }]
+    // 返り値: 選択した value / キャンセル・Esc なら null
+    SNS.menu = function (opts) {
+        opts = opts || {};
+        return new Promise((resolve) => {
+            const back = document.createElement("div");
+            back.className = "modal";
+            const card = document.createElement("div");
+            card.className = "modal-card modal-card--sm";
+            const h = document.createElement("h2");
+            h.textContent = opts.title || "";
+            card.appendChild(h);
+            if (opts.message) {
+                const p = document.createElement("p");
+                p.className = "modal-msg";
+                p.textContent = opts.message;
+                card.appendChild(p);
+            }
+            const list = document.createElement("div");
+            list.className = "menu-list";
+            const close = (v) => {
+                if (restore) restore();
+                back.remove();
+                // Escape 経由は false で来るため null に正規化する
+                resolve(v === undefined || v === false || v === "" ? null : v);
+            };
+            for (const item of opts.items || []) {
+                const b = document.createElement("button");
+                b.type = "button";
+                b.className =
+                    "menu-item btn " +
+                    (item.kind === "solid"
+                        ? "btn-solid"
+                        : item.kind === "danger"
+                          ? "btn-danger"
+                          : "btn-outline");
+                if (item.icon) {
+                    const i = document.createElement("i");
+                    i.className = item.icon;
+                    i.setAttribute("aria-hidden", "true");
+                    b.appendChild(i);
+                }
+                b.appendChild(document.createTextNode(item.label));
+                b.addEventListener("click", () => close(item.value));
+                list.appendChild(b);
+            }
+            card.appendChild(list);
+            back.appendChild(card);
+            document.body.appendChild(back);
+            const restore = SNS.dialogize(back, close);
+            back.addEventListener("click", (e) => {
+                if (e.target === back) close(null);
+            });
+            const first = list.querySelector("button");
+            if (first) first.focus();
         });
     };
 
@@ -367,6 +451,82 @@
     }
     SNS.renderPoll = renderPoll;
 
+    /* ---- 引用ポストの埋め込みカード ---- */
+    // link:false のときは外側のモーダル（引用作成時）用に要素だけ作る
+    function quoteCard(post, opts) {
+        opts = opts || {};
+        const card = document.createElement(opts.link === false ? "div" : "a");
+        card.className = "quote-card";
+        card.dataset.quoteId = post.id;
+        if (opts.link !== false) {
+            card.href = "/status/" + encodeURIComponent(post.id);
+            card.setAttribute("aria-label", post.author.name + " のポストを表示");
+        }
+
+        const head = document.createElement("div");
+        head.className = "quote-head";
+        const av = document.createElement("span");
+        av.className = "avatar avatar--sm quote-avatar";
+        av.appendChild(SNS.imgFor(post.author));
+        const name = document.createElement("b");
+        name.className = "quote-name";
+        name.textContent = post.author.name;
+        const handle = document.createElement("span");
+        handle.className = "quote-handle";
+        handle.textContent = post.author.handle;
+        const time = document.createElement("span");
+        time.className = "quote-time";
+        time.textContent = "· " + SNS.relativeTime(post.createdAt);
+        head.append(av, name, handle, time);
+
+        const box = document.createElement("div");
+        box.className = "quote-box";
+        if (post.text) {
+            const t = document.createElement("p");
+            t.className = "quote-text";
+            t.textContent = post.text;
+            box.appendChild(t);
+        }
+        if (post.media && post.media.length) {
+            const m = post.media[0];
+            if (m.type === "video") {
+                const v = document.createElement("div");
+                v.className = "quote-media quote-media--video";
+                v.innerHTML = '<i class="fa-solid fa-film" aria-hidden="true"></i><span>動画</span>';
+                box.appendChild(v);
+            } else {
+                const img = document.createElement("img");
+                img.className = "quote-media";
+                img.src = m.url;
+                img.loading = "lazy";
+                img.alt = "";
+                box.appendChild(img);
+            }
+        }
+        if (post.poll) {
+            const p = document.createElement("div");
+            p.className = "quote-poll";
+            p.innerHTML = '<i class="fa-solid fa-square-poll-horizontal" aria-hidden="true"></i><span>投票</span>';
+            box.appendChild(p);
+        }
+        if (!post.text && !(post.media || []).length && !post.poll) {
+            const p = document.createElement("p");
+            p.className = "quote-text quote-text--empty";
+            p.textContent = "（本文なし）";
+            box.appendChild(p);
+        }
+
+        card.append(head, box);
+        return card;
+    }
+    SNS.quoteCard = quoteCard;
+
+    // 自分の投稿をタイムラインの先頭に入れる（存在するページのみ）
+    SNS.prependEntry = function (entry) {
+        const list = document.getElementById("feed-list");
+        if (list) list.prepend(SNS.renderEntry(entry));
+    };
+
     SNS.renderEntry = function (entry, opts) {
         opts = opts || {};
         const post = entry.post || entry;
@@ -375,6 +535,9 @@
         const article = document.createElement("article");
         article.className = "post" + (opts.detail ? " post--detail" : "");
         article.dataset.id = post.id;
+        article.dataset.mine = post.mine ? "1" : "0";
+        // 操作ダイアログ（引用など）から元データに辿り着けるようにする
+        article.__post = post;
 
         if (repostedBy) {
             const ctx = document.createElement("div");
@@ -420,13 +583,16 @@
             time.textContent = SNS.relativeTime(post.createdAt);
             head.append(dot, time);
         }
-        if (post.mine) {
+        if (post.canDelete) {
             const del = document.createElement("button");
             del.type = "button";
             del.className = "post-del";
             del.dataset.act = "delete";
             del.title = "削除";
-            del.setAttribute("aria-label", "このポストを削除");
+            del.setAttribute(
+                "aria-label",
+                post.mine ? "このポストを削除" : "管理者権限でこのポストを削除"
+            );
             del.innerHTML = '<i class="fa-solid fa-trash-can" aria-hidden="true"></i>';
             head.appendChild(del);
         }
@@ -442,6 +608,8 @@
         const mediaEl = renderMedia(post.media);
         if (mediaEl) body.appendChild(mediaEl);
         if (post.poll) body.appendChild(renderPoll(post));
+        // 引用リポストの埋め込み（元ポストへのリンク付き）
+        if (post.quote) body.appendChild(quoteCard(post.quote));
 
         if (opts.detail) {
             const t = document.createElement("div");
@@ -512,9 +680,12 @@
     }
 
     async function doDelete(id, article) {
+        const byAdmin = article.dataset.mine !== "1";
         const yes = await SNS.confirm({
-            title: "ポストを削除",
-            message: "このポストを削除しますか？この操作は取り消せません。",
+            title: byAdmin ? "ポストを削除（管理者）" : "ポストを削除",
+            message: byAdmin
+                ? "管理者権限でこのポストを削除しますか？投稿者には通知が届きます。この操作は取り消せません。"
+                : "このポストを削除しますか？この操作は取り消せません。",
             okText: "削除",
             danger: true,
         });
@@ -541,6 +712,123 @@
         }
         const old = article.querySelector(".poll");
         if (old) old.replaceWith(renderPoll({ poll: res.data.poll }));
+    }
+
+    /* ---- リポスト / 引用リポスト ---- */
+    function repostChoice() {
+        return SNS.menu({
+            title: "リポスト",
+            items: [
+                {
+                    label: "リポスト",
+                    value: "repost",
+                    kind: "solid",
+                    icon: "fa-solid fa-retweet",
+                },
+                {
+                    label: "引用してリポスト",
+                    value: "quote",
+                    kind: "outline",
+                    icon: "fa-solid fa-quote-left",
+                },
+            ],
+        });
+    }
+
+    // 引用コメントの入力モーダル（元ポストのプレビュー付き）
+    function openQuote(post) {
+        return new Promise((resolve) => {
+            if (!post) return resolve(null);
+            const back = document.createElement("div");
+            back.className = "modal";
+            const card = document.createElement("div");
+            card.className = "modal-card";
+
+            const head = document.createElement("div");
+            head.className = "modal-head";
+            const h = document.createElement("h2");
+            h.textContent = "引用してリポスト";
+            const closeX = document.createElement("button");
+            closeX.type = "button";
+            closeX.className = "post-del";
+            closeX.setAttribute("aria-label", "閉じる");
+            closeX.innerHTML = '<i class="fa-solid fa-xmark" aria-hidden="true"></i>';
+            head.append(h, closeX);
+
+            const field = document.createElement("label");
+            field.className = "field";
+            const cap = document.createElement("span");
+            cap.textContent = "コメントを入力（280文字以内）";
+            const ta = document.createElement("textarea");
+            ta.className = "quote-input";
+            ta.rows = 3;
+            ta.maxLength = 280;
+            ta.placeholder = "引用を追加";
+            field.append(cap, ta);
+
+            const preview = document.createElement("div");
+            preview.className = "quote-preview";
+            preview.appendChild(quoteCard(post, { link: false }));
+
+            const actions = document.createElement("div");
+            actions.className = "modal-actions";
+            const cancel = document.createElement("button");
+            cancel.type = "button";
+            cancel.className = "btn btn-outline";
+            cancel.textContent = "キャンセル";
+            const send = document.createElement("button");
+            send.type = "button";
+            send.className = "btn btn-solid";
+            send.textContent = "ポストする";
+            send.disabled = true;
+            actions.append(cancel, send);
+
+            card.append(head, field, preview, actions);
+            back.appendChild(card);
+            document.body.appendChild(back);
+
+            const close = (v) => {
+                restore();
+                back.remove();
+                resolve(v);
+            };
+            const restore = SNS.dialogize(back, close);
+
+            closeX.addEventListener("click", () => close(null));
+            cancel.addEventListener("click", () => close(null));
+            back.addEventListener("click", (e) => {
+                if (e.target === back) close(null);
+            });
+            ta.addEventListener("input", () => {
+                send.disabled = ta.value.trim().length === 0;
+            });
+            send.addEventListener("click", async () => {
+                const text = ta.value.trim();
+                if (!text) return;
+                send.disabled = true;
+                send.textContent = "送信中…";
+                const res = await SNS.api(
+                    "POST",
+                    "/api/posts/" + encodeURIComponent(post.id) + "/quote",
+                    { text }
+                );
+                if (res.status === 401) {
+                    close(null);
+                    location.href = "/login";
+                    return;
+                }
+                if (res.data && res.data.ok) {
+                    SNS.notify("引用ポストを投稿しました");
+                    SNS.prependEntry({ kind: "post", post: res.data.post });
+                    close(true);
+                } else {
+                    SNS.notify(SNS.failMessage(res.data, "引用できませんでした"), "error");
+                    send.disabled = false;
+                    send.textContent = "ポストする";
+                }
+            });
+            ta.focus();
+        });
     }
 
     function share(id) {
@@ -579,8 +867,16 @@
                 if (act === "reply") location.href = "/status/" + encodeURIComponent(id);
                 else if (act === "share") share(id);
                 else if (act === "delete") await doDelete(id, article);
-                else if (act === "like" || act === "repost" || act === "bookmark")
-                    await toggle(actEl, id, act);
+                else if (act === "repost") {
+                    // リポスト済みなら解除、未リポストなら「リポスト / 引用」を選択
+                    if (actEl.classList.contains("is-active")) {
+                        await toggle(actEl, id, "repost");
+                    } else {
+                        const choice = await repostChoice();
+                        if (choice === "repost") await toggle(actEl, id, "repost");
+                        else if (choice === "quote") await openQuote(article.__post);
+                    }
+                } else if (act === "like" || act === "bookmark") await toggle(actEl, id, act);
                 return;
             }
             if (ev.target.closest("video")) return;

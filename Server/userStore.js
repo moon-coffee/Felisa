@@ -36,10 +36,13 @@ function readUsers() {
     return readArray(USERS_FILE).map(normalize);
 }
 
-// ルーティング・Object プロトタイプと衝突するため、ユーザーIDとして使えない名前
+// ルーティング・Object プロトタイプと衝突するため、ユーザーIDとして使えない名前。
+// "system" は自動モデレーション通知の発行者として使うため予約する
+// （本人になりすまして規約警告を送れないようにする）。
 const RESERVED_IDS = new Set([
     "api", "js", "images", "status", "search", "settings", "bookmarks",
-    "notifications", "login", "signin", "home", "media", "favicon.ico",
+    "notifications", "login", "signin", "home", "media", "favicon.ico", "out",
+    "system",
     "__proto__", "constructor", "prototype", "hasownproperty", "tostring", "valueof",
 ]);
 const isReservedId = (id) => RESERVED_IDS.has(String(id).toLowerCase());

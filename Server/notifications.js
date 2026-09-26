@@ -24,6 +24,7 @@ function decorate(row) {
         type: row.type,
         createdAt: row.createdAt,
         read: row.read,
+        detail: row.detail || null,
         actor: present.author(row.actor),
         post: post
             ? { id: post.id, text: post.text }

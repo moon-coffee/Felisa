@@ -473,6 +473,131 @@ a.post-name:hover {
     text-decoration: underline;
 }
 
+/* 投稿本文中の URL（開く前必ずサーバーのチェックページ /out を経由する） */
+.post-link {
+    color: var(--accent);
+    word-break: break-all;
+}
+
+.post-link:hover {
+    text-decoration: underline;
+}
+
+/* ============ 引用ポスト ============ */
+.quote-card {
+    display: block;
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background-color: var(--panel);
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+a.quote-card:hover {
+    background-color: var(--panel-hover);
+    border-color: var(--accent);
+}
+
+.quote-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-size: 14px;
+}
+
+.quote-avatar {
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.quote-name {
+    font-weight: 700;
+    max-width: 45%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.quote-handle,
+.quote-time {
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.quote-box {
+    margin-top: 6px;
+    font-size: 14px;
+}
+
+.quote-text {
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.5;
+}
+
+.quote-text--empty {
+    color: var(--text-dim);
+}
+
+.quote-media {
+    display: block;
+    width: 100%;
+    max-height: 220px;
+    object-fit: cover;
+    margin-top: 8px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+}
+
+.quote-media--video,
+.quote-poll {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text-dim);
+    background-color: var(--panel-hover);
+}
+
+/* 引用作成モーダル内のプレビュー */
+.quote-preview {
+    margin-top: 4px;
+}
+
+.quote-preview .quote-card {
+    margin-top: 0;
+    cursor: default;
+}
+
+.quote-input {
+    width: 100%;
+    min-height: 72px;
+}
+
+/* ============ 選択メニュー（リポスト / 引用） ============ */
+.menu-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.menu-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+}
+
 .post-actions {
     display: flex;
     justify-content: space-between;
@@ -889,6 +1014,7 @@ a.post-name:hover {
 .notif-icon--repost { color: var(--repost); }
 .notif-icon--reply,
 .notif-icon--follow { color: var(--accent); }
+.notif-icon--moderation { color: var(--like); }
 
 .notif-line {
     font-size: 15px;

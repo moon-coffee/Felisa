@@ -8,6 +8,9 @@ const notifications = require("./notificationStore");
 const mediaStore = require("./mediaStore");
 const session = require("./session");
 const present = require("./present");
+const admin = require("./adminStore");
+const moderation = require("./moderation");
+const accessLog = require("./accessLog");
 
 const router = express.Router();
 
@@ -24,6 +27,7 @@ function requireAuth(req, res) {
 /* ---------- タイムライン ---------- */
 
 router.get("/", (req, res) => {
+    accessLog.note(req, "タイムライン取得");
     const viewer = session.currentUserId(req);
     const feed = req.query.feed === "following" ? "following" : "recommended";
     const since = Math.max(0, parseInt(req.query.since, 10) || 0);
@@ -58,7 +62,7 @@ router.get("/", (req, res) => {
 
 /* ---------- 投稿 / 返信 ---------- */
 
-router.post("/", (req, res) => {
+router.post("/", async (req, res) => {
     const user = requireAuth(req, res);
     if (!user) return;
 
@@ -142,12 +146,39 @@ router.post("/", (req, res) => {
         }
     }
 
+    // Llama Guard 3 による規約チェック（投稿する前に同期で判定）。
+    // 違反と判定されたら保存せず（＝削除相当）、警告を出して拒否する。
+    // Ollama が使えない場合は "pending" として保存し、後続の再スキャンに委ねる。
+    const verdict = await moderation.checkAtCreate({
+        userId: user.userId,
+        text,
+        poll: pollInput,
+    });
+    if (verdict.verdict === "reject") {
+        accessLog.note(req, "投稿（規約違反のため拒否）");
+        return res.status(400).json({
+            ok: false,
+            errors: {
+                form:
+                    "この投稿は利用規約に違反している可能性があるため投稿できませんでした。" +
+                    (verdict.label ? `（判定: ${verdict.label}）` : "") +
+                    " 同じ内容の投稿を続けるとアカウントが制限されることがあります。",
+            },
+            moderation: { rejected: true, categories: verdict.categories || [] },
+        });
+    }
+
     const post = postStore.create({
         userId: user.userId,
         text,
         replyTo,
         media,
         poll: pollInput,
+        moderation: {
+            state: verdict.verdict === "pass" ? "safe" : "pending",
+            at: Date.now(),
+            categories: [],
+        },
     });
 
     if (parent) {
@@ -164,9 +195,91 @@ router.post("/", (req, res) => {
         .json({ ok: true, post: present.decoratePost(post, user.userId) });
 });
 
+/* ---------- 引用リポスト ---------- */
+
+// 本文を付けて元ポストを引用する。元ポスト側には「この引用によるリポスト」として
+// 記録されるため、リポスト件数・通知は素のリポストと同じように動く。
+// 引用ポストを削除すると、元ポスト側のその記録も自動的に外れる（postStore.remove）。
+router.post("/:id/quote", async (req, res) => {
+    const user = requireAuth(req, res);
+    if (!user) return;
+
+    const target = postStore.get(req.params.id);
+    if (!target) {
+        return res
+            .status(404)
+            .json({ ok: false, errors: { form: "ポストが見つかりません。" } });
+    }
+    if (blocks.between(user.userId, target.userId)) {
+        return res
+            .status(403)
+            .json({ ok: false, errors: { form: "このポストには操作できません。" } });
+    }
+    if (target.quoteOf) {
+        return res
+            .status(400)
+            .json({ ok: false, errors: { form: "引用の引用はできません。" } });
+    }
+
+    const text = (typeof (req.body || {}).text === "string" ? req.body.text : "").trim();
+    if (text === "") {
+        return res
+            .status(400)
+            .json({ ok: false, errors: { text: "引用のコメントを入力してください。" } });
+    }
+    if (text.length > postStore.TEXT_MAX) {
+        return res.status(400).json({
+            ok: false,
+            errors: { text: `本文は${postStore.TEXT_MAX}文字以内で入力してください。` },
+        });
+    }
+
+    const verdict = await moderation.checkAtCreate({
+        userId: user.userId,
+        text,
+        source: "quote",
+    });
+    if (verdict.verdict === "reject") {
+        accessLog.note(req, "引用リポスト（規約違反のため拒否）");
+        return res.status(400).json({
+            ok: false,
+            errors: {
+                form:
+                    "この引用は利用規約に違反している可能性があるため投稿できませんでした。" +
+                    (verdict.label ? `（判定: ${verdict.label}）` : ""),
+            },
+            moderation: { rejected: true, categories: verdict.categories || [] },
+        });
+    }
+
+    const post = postStore.create({
+        userId: user.userId,
+        text,
+        quoteOf: target.id,
+        moderation: {
+            state: verdict.verdict === "pass" ? "safe" : "pending",
+            at: Date.now(),
+            categories: [],
+        },
+    });
+    postStore.setRepost(target.id, user.userId, true, post.id);
+    notifications.add({
+        userId: target.userId,
+        type: "repost",
+        actor: user.userId,
+        postId: target.id,
+    });
+    accessLog.note(req, "引用リポスト");
+
+    return res
+        .status(201)
+        .json({ ok: true, post: present.decoratePost(post, user.userId) });
+});
+
 /* ---------- 単一投稿（スレッド） ---------- */
 
 router.get("/:id", (req, res) => {
+    accessLog.note(req, "投稿（スレッド）取得");
     const viewer = session.currentUserId(req);
     const post = postStore.get(req.params.id);
     if (!post) {
@@ -202,15 +315,31 @@ router.delete("/:id", (req, res) => {
             .status(404)
             .json({ ok: false, errors: { form: "投稿が見つかりません。" } });
     }
-    if (post.userId.toLowerCase() !== user.userId.toLowerCase()) {
+    const isOwner = post.userId.toLowerCase() === user.userId.toLowerCase();
+    const isMod = admin.has(user.userId); // Server/data/admin.json に列挙された Admin
+    if (!isOwner && !isMod) {
         return res
             .status(403)
             .json({ ok: false, errors: { form: "自分の投稿のみ削除できます。" } });
     }
+    accessLog.note(req, isOwner ? "ポスト削除" : "ポスト削除（管理者）");
+
     const { removed, mediaIds } = postStore.remove(post.id);
     mediaStore.removeFiles(mediaIds);
     notifications.removeForPosts(removed);
     bookmarks.removeForPosts(removed);
+
+    // 管理者によって削除された場合は本人へ通知する
+    if (!isOwner) {
+        notifications.add({
+            userId: post.userId,
+            type: "moderation",
+            actor: "system",
+            postId: null,
+            detail: "管理者があなたのポストを削除しました。削除理由は利用規約の違反です。",
+            dedupe: false,
+        });
+    }
     return res.json({ ok: true, removed });
 });
 
@@ -233,6 +362,20 @@ function toggleHandler(kind, on) {
                 .status(403)
                 .json({ ok: false, errors: { form: "この投稿には操作できません。" } });
         }
+        accessLog.note(
+            req,
+            kind === "like"
+                ? on
+                    ? "いいね"
+                    : "いいね解除"
+                : kind === "repost"
+                  ? on
+                      ? "リポスト"
+                      : "リポスト解除"
+                  : on
+                    ? "ブックマーク追加"
+                    : "ブックマーク解除"
+        );
 
         if (kind === "like") {
             const result = postStore.setLike(post.id, user.userId, on);
@@ -290,6 +433,7 @@ router.post("/:id/vote", (req, res) => {
         user.userId,
         (req.body || {}).option
     );
+    accessLog.note(req, result.error ? "投票（失敗）" : "投票");
     if (result.error) {
         return res.status(400).json({ ok: false, errors: { form: result.error } });
     }

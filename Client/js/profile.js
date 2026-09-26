@@ -139,7 +139,8 @@ function renderProfile(user) {
 
     const link = document.querySelector("[data-profile-link]");
     if (user.link && /^https?:\/\//i.test(user.link)) {
-        link.href = user.link;
+        // 外部リンクも必ずチェックページ（/out）を経由させる
+        link.href = "/out?to=" + encodeURIComponent(user.link);
         try {
             link.textContent = new URL(user.link).host;
         } catch (e) {

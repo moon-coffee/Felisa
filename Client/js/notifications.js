@@ -10,12 +10,14 @@ const LABEL = {
     repost: "さんがあなたのポストをリポストしました",
     reply: "さんがあなたのポストに返信しました",
     follow: "さんがあなたをフォローしました",
+    moderation: "さんからモデレーション通知があります",
 };
 const ICON = {
     like: "fa-solid fa-heart notif-icon--like",
     repost: "fa-solid fa-retweet notif-icon--repost",
     reply: "fa-solid fa-comment notif-icon--reply",
     follow: "fa-solid fa-user-plus notif-icon--follow",
+    moderation: "fa-solid fa-shield-halved notif-icon--moderation",
 };
 
 let filter = "all";
@@ -60,11 +62,16 @@ function renderNotif(n) {
     body.className = "notif-body";
     const line = document.createElement("div");
     line.className = "notif-line";
-    const strong = document.createElement("b");
-    strong.textContent = n.actor.name;
-    line.appendChild(strong);
-    if (n.actor.isAdmin) line.appendChild(SNS.adminBadge());
-    line.appendChild(document.createTextNode(" " + (LABEL[n.type] || "")));
+    if (n.detail) {
+        // 規約違反の警告など、種別ラベルで表せない文言（発行者は運営／自動モデレーション）
+        line.textContent = n.detail;
+    } else {
+        const strong = document.createElement("b");
+        strong.textContent = n.actor.name;
+        line.appendChild(strong);
+        if (n.actor.isAdmin) line.appendChild(SNS.adminBadge());
+        line.appendChild(document.createTextNode(" " + (LABEL[n.type] || "")));
+    }
     body.appendChild(line);
     if (n.post && n.post.text) {
         const snip = document.createElement("div");

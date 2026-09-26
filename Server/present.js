@@ -10,8 +10,24 @@ function lc(v) {
     return v ? String(v).toLowerCase() : null;
 }
 
+// 自動モデレーションなど、本人が存在しない「システム」通知の発行者。
+// （規約違反の警告は誰からも来ない通知として扱うため、専用の表示にしている）
+const SYSTEM_ID = "system";
+
+function systemAuthor() {
+    return {
+        userId: "",
+        name: "Felisa",
+        handle: "運営",
+        avatar: null,
+        isAdmin: true,
+        system: true,
+    };
+}
+
 function author(userId) {
     const u = users.findByUserId(userId);
+    if (!u && lc(userId) === SYSTEM_ID) return systemAuthor();
     const id = u ? u.userId : userId;
     return {
         userId: id,
@@ -50,10 +66,21 @@ function decoratePoll(poll, viewerId) {
     };
 }
 
-function decoratePost(post, viewerId) {
+// 引用元ポストの埋め込み。depth で入れ子を1段までに制限し、
+// 引用の引用で無限に深くならないようにする。削除済み・ブロック関係なら null。
+function decorateQuote(post, viewerId, depth) {
+    if (!post.quoteOf || depth >= 1) return null;
+    const target = postStore.get(post.quoteOf);
+    if (!target) return null;
+    if (viewerId && blocks.between(viewerId, target.userId)) return null;
+    return decoratePost(target, viewerId, depth + 1);
+}
+
+function decoratePost(post, viewerId, depth = 0) {
     const vid = lc(viewerId);
     const likes = post.likes || [];
     const reposts = post.reposts || [];
+    const isMine = vid ? lc(post.userId) === vid : false;
     return {
         id: post.id,
         text: post.text,
@@ -63,13 +90,16 @@ function decoratePost(post, viewerId) {
         hashtags: postStore.extractHashtags(post.text),
         media: decorateMedia(post.media),
         poll: decoratePoll(post.poll, viewerId),
+        quote: decorateQuote(post, viewerId, depth),
         likeCount: likes.length,
         repostCount: reposts.length,
         replyCount: postStore.replyCount(post.id),
         likedByMe: vid ? likes.some((u) => lc(u) === vid) : false,
         repostedByMe: vid ? reposts.some((r) => lc(r.userId) === vid) : false,
         bookmarkedByMe: vid ? bookmarks.has(viewerId, post.id) : false,
-        mine: vid ? lc(post.userId) === vid : false,
+        mine: isMine,
+        // 本人に加えて Admin も削除できる（server 側も同じ条件で検証する）
+        canDelete: vid ? isMine || admin.has(viewerId) : false,
     };
 }
 

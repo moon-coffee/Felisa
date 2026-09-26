@@ -13,6 +13,9 @@ const mediaRouter = require("./media");
 const mediaStore = require("./mediaStore");
 const session = require("./session");
 const { isSecureRequest, setClientIp } = require("./trust");
+const accessLog = require("./accessLog");
+const moderation = require("./moderation");
+const linkGuard = require("./linkGuard");
 
 const app = express();
 const PORT = process.env.PORT || 80;
@@ -51,6 +54,12 @@ if (sweep.removed > 0) {
 setInterval(() => mediaStore.sweepOrphans(), 12 * 60 * 60 * 1000).unref();
 
 app.disable("x-powered-by");
+
+// 監査ログ（全リクエストの IP / UA / 時刻 / ページ / 操作）。
+// ゲートウェイのシークレット検証などで遮断されるリクエストも記録するため、
+// 他のミドルウェアより先に置く。記録自体は res.finish 時に行うため、
+// この時点ではまだ req.ip が確定していない（完了時に読み直す）。
+app.use(accessLog.middleware);
 
 // クラウド Gateway 経由の構成（GATEWAY_SECRET 設定時）:
 // Cloudflare Tunnel の先にいる Node には理論上誰でも到達しうるため、
@@ -273,6 +282,10 @@ app.use("/api/trends", apiLimiter, trendsRouter);
 app.use("/api/media", apiLimiter, mediaRouter);
 app.use("/api", apiLimiter, authRouter);
 
+// 投稿中の URL へのアクセス。必ずここを経由して安全性を確認する
+// （許可 / ブロックの判定ページ → 移行時に再検査）。
+app.use("/out", apiLimiter, linkGuard.router);
+
 /* ---------- HTML シェル ---------- */
 function sendPage(res, file) {
     return res.sendFile(path.join(STATIC_DIR, file), {
@@ -327,6 +340,7 @@ const RESERVED = new Set([
     "signin",
     "home",
     "media",
+    "out",
     "favicon.ico",
 ]);
 app.get("/:username", (req, res, next) => {
@@ -369,4 +383,6 @@ app.listen(...listenArgs, () => {
     console.log(
         `Server running (${isProd ? "production" : "development"}): http://${HOST || "localhost"}:${PORT}`
     );
+    // Llama Guard 3 による全投稿の定期チェックを開始（起動後少し経ってから1回目）
+    moderation.start();
 });

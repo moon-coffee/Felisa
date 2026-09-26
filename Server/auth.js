@@ -12,6 +12,7 @@ const mediaStore = require("./mediaStore");
 const pngUtil = require("./pngUtil");
 const admin = require("./adminStore");
 const present = require("./present");
+const accessLog = require("./accessLog");
 
 const router = express.Router();
 
@@ -67,6 +68,7 @@ function findTarget(req) {
 /* ==================== 認証 ==================== */
 
 router.post("/register", (req, res) => {
+    accessLog.note(req, "新規登録");
     const body = req.body || {};
     const userId = asString(body.userId).trim();
     const password = asString(body.password);
@@ -88,9 +90,11 @@ router.post("/register", (req, res) => {
         errors.password = `パスワードは${PASSWORD_MAX}文字以内で入力してください。`;
 
     if (Object.keys(errors).length > 0) {
+        accessLog.note(req, "新規登録（入力エラー）");
         return res.status(400).json({ ok: false, errors });
     }
     if (store.findByUserId(userId)) {
+        accessLog.note(req, "新規登録（ID重複）");
         return res.status(409).json({
             ok: false,
             errors: { userId: "このユーザーIDは既に使用されています。" },
@@ -104,6 +108,7 @@ router.post("/register", (req, res) => {
 });
 
 router.post("/login", (req, res) => {
+    accessLog.note(req, "ログイン");
     const body = req.body || {};
     const userId = asString(body.userId).trim();
     const password = asString(body.password);
@@ -117,6 +122,7 @@ router.post("/login", (req, res) => {
 
     const key = userId.toLowerCase();
     if (loginLocked(key)) {
+        accessLog.note(req, "ログイン（ロック中のため拒否）");
         return res.status(429).json({
             ok: false,
             errors: { form: "ログインの失敗が続いたため、しばらく待ってから再度お試しください。" },
@@ -126,6 +132,7 @@ router.post("/login", (req, res) => {
     const user = password.length <= PASSWORD_MAX ? store.findByUserId(userId) : null;
     if (!store.verifyPasswordOrDummy(password, user)) {
         recordLoginFail(key);
+        accessLog.note(req, "ログイン失敗");
         return res.status(401).json({
             ok: false,
             errors: { form: "ユーザーIDかパスワードが正しくありません。" },
@@ -138,6 +145,7 @@ router.post("/login", (req, res) => {
 });
 
 router.post("/logout", (req, res) => {
+    accessLog.note(req, "ログアウト");
     session.clear(req, res);
     return res.json({ ok: true });
 });
@@ -161,6 +169,7 @@ router.get("/me", (req, res) => {
 });
 
 router.put("/me", (req, res) => {
+    accessLog.note(req, "プロフィール更新");
     const user = requireAuth(req, res);
     if (!user) return;
     const body = req.body || {};
@@ -176,6 +185,7 @@ router.put("/me", (req, res) => {
 // メール送信機能は無く保存だけの項目なので、パスワードの再確認は不要。
 // 空文字なら解除（未登録）として受け付ける。
 router.put("/me/email", (req, res) => {
+    accessLog.note(req, "メールアドレス更新");
     const user = requireAuth(req, res);
     if (!user) return;
     const email = asString((req.body || {}).email).trim();
@@ -202,6 +212,7 @@ router.put("/me/email", (req, res) => {
 });
 
 router.put("/me/password", (req, res) => {
+    accessLog.note(req, "パスワード変更");
     const user = requireAuth(req, res);
     if (!user) return;
     const body = req.body || {};
@@ -235,6 +246,7 @@ router.put("/me/password", (req, res) => {
 
 // ユーザー名（ハンドル）の変更 — 1週間に1回まで
 router.put("/me/username", (req, res) => {
+    accessLog.note(req, "ユーザー名変更");
     const user = requireAuth(req, res);
     if (!user) return;
     const body = req.body || {};
@@ -271,6 +283,7 @@ router.put("/me/username", (req, res) => {
 
 // アカウント削除の要求（パスワード再確認が必須）
 router.delete("/me", (req, res) => {
+    accessLog.note(req, "アカウント削除");
     const user = requireAuth(req, res);
     if (!user) return;
     const password = asString((req.body || {}).password);
@@ -312,6 +325,7 @@ router.get("/me/sessions", (req, res) => {
 });
 
 router.delete("/me/sessions", (req, res) => {
+    accessLog.note(req, "全端末ログアウト");
     const user = requireAuth(req, res);
     if (!user) return;
     session.revokeOthers(user.userId, req);
@@ -319,6 +333,7 @@ router.delete("/me/sessions", (req, res) => {
 });
 
 router.delete("/me/sessions/:id", (req, res) => {
+    accessLog.note(req, "端末ログアウト");
     const user = requireAuth(req, res);
     if (!user) return;
     const okRevoke = session.revoke(user.userId, req.params.id, req);
@@ -333,6 +348,7 @@ router.delete("/me/sessions/:id", (req, res) => {
 /* ---- プロフィール画像 / ヘッダ画像（クライアントで PNG 化済みを受け取る）---- */
 
 router.put("/me/avatar", (req, res) => {
+    accessLog.note(req, "アイコン変更");
     const user = requireAuth(req, res);
     if (!user) return;
     const buf = req.body;
@@ -353,6 +369,7 @@ router.put("/me/avatar", (req, res) => {
 });
 
 router.put("/me/header", (req, res) => {
+    accessLog.note(req, "ヘッダ画像変更");
     const user = requireAuth(req, res);
     if (!user) return;
     const buf = req.body;
@@ -368,6 +385,7 @@ router.put("/me/header", (req, res) => {
 });
 
 router.delete("/me/header", (req, res) => {
+    accessLog.note(req, "ヘッダ画像削除");
     const user = requireAuth(req, res);
     if (!user) return;
     store.setHeader(user.userId, false);
@@ -446,6 +464,7 @@ router.get("/users/:username/likes", (req, res) => {
 });
 
 router.post("/users/:username/follow", (req, res) => {
+    accessLog.note(req, "フォロー");
     const me = requireAuth(req, res);
     if (!me) return;
     const target = findTarget(req);
@@ -479,6 +498,7 @@ router.post("/users/:username/follow", (req, res) => {
 });
 
 router.delete("/users/:username/follow", (req, res) => {
+    accessLog.note(req, "フォロー解除");
     const me = requireAuth(req, res);
     if (!me) return;
     const target = findTarget(req);
@@ -496,6 +516,7 @@ router.delete("/users/:username/follow", (req, res) => {
 });
 
 router.post("/users/:username/block", (req, res) => {
+    accessLog.note(req, "ブロック");
     const me = requireAuth(req, res);
     if (!me) return;
     const target = findTarget(req);
@@ -515,6 +536,7 @@ router.post("/users/:username/block", (req, res) => {
 });
 
 router.delete("/users/:username/block", (req, res) => {
+    accessLog.note(req, "ブロック解除");
     const me = requireAuth(req, res);
     if (!me) return;
     const target = findTarget(req);
