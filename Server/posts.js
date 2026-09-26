@@ -146,26 +146,30 @@ router.post("/", async (req, res) => {
         }
     }
 
-    // Llama Guard 3 による規約チェック（投稿する前に同期で判定）。
-    // 違反と判定されたら保存せず（＝削除相当）、警告を出して拒否する。
-    // Ollama が使えない場合は "pending" として保存し、後続の再スキャンに委ねる。
-    const verdict = await moderation.checkAtCreate({
-        userId: user.userId,
-        text,
-        poll: pollInput,
-    });
-    if (verdict.verdict === "reject") {
-        accessLog.note(req, "投稿（規約違反のため拒否）");
-        return res.status(400).json({
-            ok: false,
-            errors: {
-                form:
-                    "この投稿は利用規約に違反している可能性があるため投稿できませんでした。" +
-                    (verdict.label ? `（判定: ${verdict.label}）` : "") +
-                    " 同じ内容の投稿を続けるとアカウントが制限されることがあります。",
-            },
-            moderation: { rejected: true, categories: verdict.categories || [] },
+    // 規約チェック（Llama Guard）。既定は「保存して即応答 → 直後にバックグラウンドで判定」
+    // （推論に数秒〜20秒かかるため、投稿ボタンを待たせない）。違反と判定されたら
+    // 投稿はその場で削除され、作者に通知が届く。
+    // MODERATION_SYNC=true の場合のみ、従来どおり保存前に同期で判定し、違反なら 400 で拒否する。
+    let verdict = { verdict: "pending" };
+    if (moderation.SYNC) {
+        verdict = await moderation.checkAtCreate({
+            userId: user.userId,
+            text,
+            poll: pollInput,
         });
+        if (verdict.verdict === "reject") {
+            accessLog.note(req, "投稿（規約違反のため拒否）");
+            return res.status(400).json({
+                ok: false,
+                errors: {
+                    form:
+                        "この投稿は利用規約に違反している可能性があるため投稿できませんでした。" +
+                        (verdict.label ? `（判定: ${verdict.label}）` : "") +
+                        " 同じ内容の投稿を続けるとアカウントが制限されることがあります。",
+                },
+                moderation: { rejected: true, categories: verdict.categories || [] },
+            });
+        }
     }
 
     const post = postStore.create({
@@ -175,11 +179,13 @@ router.post("/", async (req, res) => {
         media,
         poll: pollInput,
         moderation: {
-            state: verdict.verdict === "pass" ? "safe" : "pending",
+            state: verdict.verdict === "pass" ? "safe" : "checking",
             at: Date.now(),
             categories: [],
         },
     });
+
+    if (!moderation.SYNC) moderation.checkAfterCreate(post, "create");
 
     if (parent) {
         notifications.add({
@@ -234,22 +240,26 @@ router.post("/:id/quote", async (req, res) => {
         });
     }
 
-    const verdict = await moderation.checkAtCreate({
-        userId: user.userId,
-        text,
-        source: "quote",
-    });
-    if (verdict.verdict === "reject") {
-        accessLog.note(req, "引用リポスト（規約違反のため拒否）");
-        return res.status(400).json({
-            ok: false,
-            errors: {
-                form:
-                    "この引用は利用規約に違反している可能性があるため投稿できませんでした。" +
-                    (verdict.label ? `（判定: ${verdict.label}）` : ""),
-            },
-            moderation: { rejected: true, categories: verdict.categories || [] },
+    // 規約チェックは保存後にバックグラウンドで実行（MODERATION_SYNC=true なら保存前に同期判定）。
+    let verdict = { verdict: "pending" };
+    if (moderation.SYNC) {
+        verdict = await moderation.checkAtCreate({
+            userId: user.userId,
+            text,
+            source: "quote",
         });
+        if (verdict.verdict === "reject") {
+            accessLog.note(req, "引用リポスト（規約違反のため拒否）");
+            return res.status(400).json({
+                ok: false,
+                errors: {
+                    form:
+                        "この引用は利用規約に違反している可能性があるため投稿できませんでした。" +
+                        (verdict.label ? `（判定: ${verdict.label}）` : ""),
+                },
+                moderation: { rejected: true, categories: verdict.categories || [] },
+            });
+        }
     }
 
     const post = postStore.create({
@@ -257,11 +267,12 @@ router.post("/:id/quote", async (req, res) => {
         text,
         quoteOf: target.id,
         moderation: {
-            state: verdict.verdict === "pass" ? "safe" : "pending",
+            state: verdict.verdict === "pass" ? "safe" : "checking",
             at: Date.now(),
             categories: [],
         },
     });
+    if (!moderation.SYNC) moderation.checkAfterCreate(post, "quote");
     postStore.setRepost(target.id, user.userId, true, post.id);
     notifications.add({
         userId: target.userId,

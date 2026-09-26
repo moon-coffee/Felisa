@@ -1,7 +1,9 @@
 // Llama Guard 3 1B（Ollama 経由）による投稿の自動モデレーション。
 //
-// - 投稿時に同期チェックし、規約違反と判定された投稿は保存せずに拒否（＝削除相当）し、
-//   ユーザーへ警告（トースト + アプリ内通知）を出す。
+// - 投稿は即座に保存して応答し、直後にバックグラウンドでチェックする
+//   （Llama Guard の推論は数秒〜20秒かかるため、投稿ボタンを待たせない）。
+//   違反と判定されたら投稿をその場で削除し、作者へ警告（アプリ内通知）を出す。
+//   保存前に判定したい場合のみ MODERATION_SYNC=true で従来どおりの同期チェックにする。
 // - 起動直後と MODERATION_RESCAN_MIN 分ごとに全投稿を再スキャンし、
 //   違反していた投稿を削除して作者に通知する（モデレーション結果が無効化された投稿を
 //   後から拾うため。画像・動画は OCR しないので本文テキストのみが対象）。
@@ -14,6 +16,7 @@
 //   OLLAMA_URL          既定 http://127.0.0.1:11434
 //   MODERATION_MODEL    既定 llama-guard3:1b（8B は llama-guard3:8b）
 //   MODERATION=false    モデレーション全体を無効化
+//   MODERATION_SYNC=true    投稿時に同期チェック（保存前に判定・違反なら400）
 //   MODERATION_TIMEOUT_MS   1回の判定のタイムアウト（既定 20000）
 //   MODERATION_RESCAN_MIN   全件再スキャン間隔（既定 30 分）
 //   MODERATION_RECHECK_MIN  safe 判定の有効期間（既定 60 分）
@@ -36,6 +39,9 @@ function intEnv(name, def, min, max) {
 const TIMEOUT_MS = intEnv("MODERATION_TIMEOUT_MS", 20000, 1000, 120000);
 const RESCAN_MS = intEnv("MODERATION_RESCAN_MIN", 30, 1, 24 * 60) * 60 * 1000;
 const RECHECK_MS = intEnv("MODERATION_RECHECK_MIN", 60, 1, 24 * 60) * 60 * 1000;
+// true で従来どおり「保存前に」同期チェック（違反なら 400 で拒否）。
+// 既定は false ＝ 保存して即応答し、直後にバックグラウンドで判定する。
+const SYNC = String(process.env.MODERATION_SYNC || "").toLowerCase() === "true";
 
 // MLCommons / Llama Guard 3 の 13 項目（S1〜S13）
 const HAZARDS = {
@@ -215,6 +221,73 @@ async function checkAtCreate({ userId, text, poll = null, postId = null, source 
     return { verdict: "pending", reason: v.reason || "unknown" };
 }
 
+/* ================= 投稿後のバックグラウンドチェック ================= */
+
+// 投稿応答を待たずに、保存直後から判定を走らせる（既定の動作）。
+// Llama Guard の推論は数秒〜20秒かかり得るので、その間に投稿は通常どおり表示される。
+// 違反と判定されたら投稿を削除し、作者に通知する（＝同期拒否の「削除側」に相当）。
+// 判定不能（Ollama 不通など）なら pending のまま次回の再スキャンに委ねる。
+const inflight = new Set();
+// Ollama への同時リクエストを1本に絞る（推論は1件ずつしか処理できないため、
+// 投稿が殺到すると待ち行列が無制限に膨らむのを防ぐ）。
+// 応答自体には影響しない（保存・応答はこの前に行われている）。
+let queue = Promise.resolve();
+
+function checkAfterCreate(post, source = "create") {
+    if (DISABLED || !post || !post.id) return Promise.resolve(null);
+    if (inflight.has(post.id)) return Promise.resolve(null);
+    inflight.add(post.id);
+
+    const run = async () => {
+        const postStore = require("./postStore");
+        // その間に本人が削除していたら何もしない
+        if (!postStore.get(post.id)) return null;
+
+        const content = buildContent(post.text, post.poll);
+        if (!content.trim()) {
+            postStore.setModeration(post.id, { state: "safe", at: Date.now(), categories: [] });
+            return { safe: true };
+        }
+        const v = await classify(content);
+        if (!postStore.get(post.id)) return null;
+        if (!v.ok) {
+            // 判定不能 → pending のまま次回の再スキャンへ
+            return { pending: v.reason };
+        }
+        if (v.safe) {
+            postStore.setModeration(post.id, { state: "safe", at: Date.now(), categories: [] });
+            return { safe: true };
+        }
+        const label = hazardLabel(v.categories);
+        recordViolation({
+            postId: post.id,
+            userId: post.userId,
+            source,
+            categories: v.categories,
+            text: content,
+        });
+        removePostAndCleanup(postStore.get(post.id) || post);
+        warn(
+            post.userId,
+            `自動モデレーション（Llama Guard）があなたの投稿を規約違反と判定し削除しました。` +
+                (label ? ` 分類: ${label}。` : "") +
+                ` 同種の投稿を続けるとアカウントが制限される可能性があります。`
+        );
+        console.log(`[moderation] 投稿時チェックで削除: ${String(post.id).slice(0, 8)}（${label || "分類なし"}）`);
+        return { removed: true, categories: v.categories, label };
+    };
+
+    // 直列キューに積む（失敗してもキューは止めない）
+    queue = queue.then(run).catch((err) => {
+        console.error("[moderation] 投稿時チェックに失敗:", err.message);
+        return null;
+    });
+    return queue.then((result) => {
+        inflight.delete(post.id);
+        return result;
+    });
+}
+
 /* ================= 全投稿の再スキャン ================= */
 
 let rescanning = false;
@@ -242,6 +315,11 @@ async function rescan() {
         const now = Date.now();
         for (const p of postStore.listAll()) {
             const m = p.moderation;
+            // 投稿直後のチェックが走っている途中のものは触らない（二重判定を避ける）
+            if (inflight.has(p.id)) {
+                stats.skipped += 1;
+                continue;
+            }
             // 最近 safe と判定済みのものは一定時間再判定しない（無駄な推論を避ける）
             if (m && m.state === "safe" && now - (m.at || 0) < RECHECK_MS) {
                 stats.skipped += 1;
@@ -321,6 +399,7 @@ module.exports = {
     classify,
     ping,
     checkAtCreate,
+    checkAfterCreate,
     rescan,
     start,
     hazardLabel,
@@ -328,4 +407,5 @@ module.exports = {
     MODEL,
     OLLAMA_URL,
     DISABLED,
+    SYNC,
 };
