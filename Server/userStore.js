@@ -51,19 +51,29 @@ function writeUsers(users) {
     writeArray(USERS_FILE, users);
 }
 
+// scrypt は CPU を強く使うため同期版を使わず、必ず非同期で呼ぶ
+// （リクエストごとにイベントループを数 ms〜数十 ms 塞ぎ、全体を止めてしまうため）。
 function hashPassword(password) {
-    const salt = crypto.randomBytes(16).toString("hex");
-    const derived = crypto.scryptSync(password, salt, 64).toString("hex");
-    return `${salt}:${derived}`;
+    return new Promise((resolve, reject) => {
+        const salt = crypto.randomBytes(16).toString("hex");
+        crypto.scrypt(password, salt, 64, (err, derived) => {
+            if (err) return reject(err);
+            resolve(`${salt}:${derived.toString("hex")}`);
+        });
+    });
 }
 
 function verifyPassword(password, stored) {
-    const [salt, derivedHex] = String(stored).split(":");
-    if (!salt || !derivedHex) return false;
-    const derived = crypto.scryptSync(password, salt, 64);
-    const storedBuf = Buffer.from(derivedHex, "hex");
-    if (storedBuf.length !== derived.length) return false;
-    return crypto.timingSafeEqual(storedBuf, derived);
+    return new Promise((resolve) => {
+        const [salt, derivedHex] = String(stored).split(":");
+        if (!salt || !derivedHex) return resolve(false);
+        crypto.scrypt(password, salt, 64, (err, derived) => {
+            if (err) return resolve(false);
+            const storedBuf = Buffer.from(derivedHex, "hex");
+            if (storedBuf.length !== derived.length) return resolve(false);
+            resolve(crypto.timingSafeEqual(storedBuf, derived));
+        });
+    });
 }
 
 // 旧 mail フィールド（現在の email とは別物）は起動時に消去する。
@@ -74,9 +84,13 @@ function verifyPassword(password, stored) {
 })();
 
 // 存在しないユーザーへのログインでも scrypt を1回実行し、応答時間でユーザーの有無を判別させない
-const DUMMY_HASH = hashPassword(crypto.randomBytes(16).toString("hex"));
-function verifyPasswordOrDummy(password, user) {
-    const ok = verifyPassword(password, user ? user.password : DUMMY_HASH);
+const DUMMY_HASH = (() => {
+    const salt = crypto.randomBytes(16).toString("hex");
+    const derived = crypto.scryptSync(crypto.randomBytes(16).toString("hex"), salt, 64);
+    return `${salt}:${derived.toString("hex")}`;
+})();
+async function verifyPasswordOrDummy(password, user) {
+    const ok = await verifyPassword(password, user ? user.password : DUMMY_HASH);
     return !!user && ok;
 }
 
@@ -100,11 +114,11 @@ function searchUsers(query, hidden = null) {
     );
 }
 
-function createUser({ userId, password }) {
+async function createUser({ userId, password }) {
     const users = readUsers();
     const user = {
         userId,
-        password: hashPassword(password),
+        password: await hashPassword(password),
         createdAt: new Date().toISOString(),
         displayName: userId,
         bio: "",
@@ -150,9 +164,10 @@ function setEmail(userId, email) {
     });
 }
 
-function setPassword(userId, newPassword) {
+async function setPassword(userId, newPassword) {
+    const password = await hashPassword(newPassword);
     return mutate(userId, (u) => {
-        u.password = hashPassword(newPassword);
+        u.password = password;
     });
 }
 

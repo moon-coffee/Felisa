@@ -85,15 +85,16 @@ router.post("/", async (req, res) => {
         }
     }
 
-    // メディアの検証（サーバーが払い出した ID のみ許可）
+    // メディアの検証（サーバーが払い出した ID のみ許可・アップロード本人のものだけ）
     const media = [];
     for (const m of mediaInput.slice(0, 4)) {
-        // 他人（または別投稿）に添付済みのメディアは再利用させない
-        // （自分の投稿を削除して他人の画像ファイルまで消せてしまうのを防ぐ）
+        // 他人のメディアを自分の投稿へ勝手に添付させない
+        // （未投稿ファイルを消させたり、表示を奪ったりするのを防ぐ）
         if (
             m &&
             typeof m.id === "string" &&
             mediaStore.exists(m.id) &&
+            mediaStore.belongsTo(m.id, user.userId) &&
             !postStore.mediaInUse(m.id) &&
             !media.some((x) => x.id === m.id)
         ) {

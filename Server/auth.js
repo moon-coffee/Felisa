@@ -67,7 +67,7 @@ function findTarget(req) {
 
 /* ==================== 認証 ==================== */
 
-router.post("/register", (req, res) => {
+router.post("/register", async (req, res) => {
     accessLog.note(req, "新規登録");
     const body = req.body || {};
     const userId = asString(body.userId).trim();
@@ -101,13 +101,13 @@ router.post("/register", (req, res) => {
         });
     }
 
-    const user = store.createUser({ userId, password });
+    const user = await store.createUser({ userId, password });
     avatar.createForUser(user.userId);
     session.issue(res, user.userId, req);
     return res.status(201).json({ ok: true, user: present.selfUser(user) });
 });
 
-router.post("/login", (req, res) => {
+router.post("/login", async (req, res) => {
     accessLog.note(req, "ログイン");
     const body = req.body || {};
     const userId = asString(body.userId).trim();
@@ -130,7 +130,7 @@ router.post("/login", (req, res) => {
     }
 
     const user = password.length <= PASSWORD_MAX ? store.findByUserId(userId) : null;
-    if (!store.verifyPasswordOrDummy(password, user)) {
+    if (!(await store.verifyPasswordOrDummy(password, user))) {
         recordLoginFail(key);
         accessLog.note(req, "ログイン失敗");
         return res.status(401).json({
@@ -211,7 +211,7 @@ router.put("/me/email", (req, res) => {
     return res.json({ ok: true, email: updated.email });
 });
 
-router.put("/me/password", (req, res) => {
+router.put("/me/password", async (req, res) => {
     accessLog.note(req, "パスワード変更");
     const user = requireAuth(req, res);
     if (!user) return;
@@ -219,7 +219,7 @@ router.put("/me/password", (req, res) => {
     const current = asString(body.currentPassword);
     const next = asString(body.newPassword);
 
-    if (!store.verifyPassword(current, user.password)) {
+    if (!(await store.verifyPassword(current, user.password))) {
         return res.status(403).json({
             ok: false,
             errors: { currentPassword: "現在のパスワードが正しくありません。" },
@@ -239,13 +239,13 @@ router.put("/me/password", (req, res) => {
             errors: { newPassword: "現在と同じパスワードは使用できません。" },
         });
     }
-    store.setPassword(user.userId, next);
+    await store.setPassword(user.userId, next);
     session.revokeOthers(user.userId, req); // 他端末を強制ログアウト
     return res.json({ ok: true });
 });
 
 // ユーザー名（ハンドル）の変更 — 1週間に1回まで
-router.put("/me/username", (req, res) => {
+router.put("/me/username", async (req, res) => {
     accessLog.note(req, "ユーザー名変更");
     const user = requireAuth(req, res);
     if (!user) return;
@@ -253,7 +253,7 @@ router.put("/me/username", (req, res) => {
     const newId = asString(body.userId).trim();
     const password = asString(body.password);
 
-    if (!store.verifyPassword(password, user.password)) {
+    if (!(await store.verifyPassword(password, user.password))) {
         return res
             .status(403)
             .json({ ok: false, errors: { password: "パスワードが正しくありません。" } });
@@ -282,12 +282,12 @@ router.put("/me/username", (req, res) => {
 });
 
 // アカウント削除の要求（パスワード再確認が必須）
-router.delete("/me", (req, res) => {
+router.delete("/me", async (req, res) => {
     accessLog.note(req, "アカウント削除");
     const user = requireAuth(req, res);
     if (!user) return;
     const password = asString((req.body || {}).password);
-    if (!store.verifyPassword(password, user.password)) {
+    if (!(await store.verifyPassword(password, user.password))) {
         return res
             .status(403)
             .json({ ok: false, errors: { password: "パスワードが正しくありません。" } });

@@ -1,23 +1,23 @@
 # Felisa
 
-X（Twitter）風のミニ SNS。**Client / Server 完全分離**構成。本番はさらに **クラウド Gateway / 自宅 Origin** に分離できる。
+X（Twitter）風のミニ SNS。**単一サーバー**で完結する構成。
 
 - **Client** … 静的な HTML / CSS / ブラウザ JS（`Client/`）。サーバーロジックを持たず、`/api/*` を `fetch` するだけ。
-- **Server** … Node.js + Express。`Client/`（本番は `dist/`）を静的配信 ＋ JSON API。データは `Server/data/` の JSON ファイル。画像は自前 PNG エンコーダ、動画は `ffmpeg`。依存は `express` / `express-rate-limit` のみ。
-- **Gateway**（任意・本番向け） … `Gateway/server.js`。公開ドメインを受けるクラウド側のフロント。静的資産のみ自前配信し、それ以外（HTML シェル・`/api/*`）はすべて Cloudflare Tunnel 経由で自宅の Server（データの正本）へ転送する。データは持たないステートレスな中継役。
+- **Server** … Node.js + Express の1プロセス。`Client/`（本番は `dist/`）を静的配信 ＋ JSON API。データは `Server/data/` の JSON ファイル。画像は自前 PNG エンコーダ、動画は `ffmpeg`。依存は `express` / `express-rate-limit` のみ。
+
+本番は Caddy 等のリバースプロキシの裏で `Server/server.js` を1つ動かすだけでよい。
 
 ## セットアップ
 
 ```bash
 npm install
-npm start           # 開発（Server 単体）  → http://localhost（PORT=3000 npm start で変更可）
-npm run prod        # 本番（Server 単体）  → minify(dist/) + NODE_ENV=production
+npm start           # 開発 → http://localhost（PORT=3000 npm start で変更可）
+npm run prod        # 本番 → minify(dist/) + NODE_ENV=production
 npm run build       # dist/ の生成のみ
-npm run gateway      # 開発（Gateway 単体、要 ORIGIN_URL）
-npm run prod:gateway # 本番（Gateway 単体）  → minify(dist/) + NODE_ENV=production
 ```
 
-クラウド Gateway + 自宅 Origin 構成のデプロイについては、`Gateway/server.js` 冒頭のコメントと `Server/server.js` の `GATEWAY_SECRET` 節を参照（共有シークレットで自宅 Origin への直接アクセスを遮断する）。
+本番では既定で `127.0.0.1` 待受になる（リバースプロキシ経由を前提）。
+直接インターネットに公開する場合は `HOST` を変更できるが、`X-Forwarded-For` 偽装によるレート制限の回避に注意。
 
 動画投稿を使うには `ffmpeg` を PATH に置く（無い場合、動画ボタンは自動的に無効化されます）。
 
@@ -31,20 +31,23 @@ npm run prod:gateway # 本番（Gateway 単体）  → minify(dist/) + NODE_ENV=
 | 自動モデレーション | **Llama Guard 3 1B（Ollama 経由）で全投稿をチェック**。**投稿は即座に保存して応答し、直後にバックグラウンドで判定**（推論で数秒かかるため、投稿ボタンを待たせない）。違反と判定されたら投稿を**その場で削除＋作者へ通知**。起動時・定期（既定30分）に全件再スキャンし、後から違反判定された投稿も削除。Ollama が落ちている間は「判定不能」として通過し、回復後の再スキャンで拾う。保存前に判定したい場合は `MODERATION_SYNC=true` |
 | URL 検査 | 投稿・プロフィール内のリンクは **必ず確認ページ（`/out`）を経由**。形式／プロトコル／ポート／認証情報／内部アドレス（プライベート・ループバック・CGNAT・link-local・metadata）／DNS 解決結果／Llama Guard の安全性を検査し、怪しいものは遷移不可。遷移時に `/out/go` で再検査してから 302 |
 | 監査ログ | **全リクエストを日次 JSONL で記録**（`Server/data/logs/access-YYYY-MM-DD.jsonl`）。IP・User-Agent・時刻・メソッド・パス・クエリ・参照ページ・種別・利用者・操作・ステータス・処理時間。操作名はルート側で上書き可能（例: 「投稿」「引用リポスト」「規約違反のため拒否」）。保持日数（既定90日）超過分は自動削除 |
-| 投稿 | 本文・**画像最大4枚**（クライアントで PNG 再変換・EXIF 除去）・**動画**（サーバーで MP4/480p 再エンコード・メタデータ削除）・**投票（2〜4択）**・**絵文字ピッカー** |
+| 投稿 | 本文・**画像最大4枚**（クライアントで PNG 再変換・EXIF 除去・**アップロード本人のものだけ添付可**）・**動画**（サーバーで MP4/480p 再エンコード・メタデータ削除）・**投票（2〜4択）**・**絵文字ピッカー** |
 | タイムライン | おすすめ / フォロー中、**60秒ごとの「新しいポストをN件表示」**、いいね・リポスト・返信・ブックマーク・共有・自投稿削除 |
 | 引用リポスト | **投稿を引用して自分のポストとして発信**（元ポストはカードで1段のみ埋め込み／ポスト内をタップでモーダル表示）。元ポスト側にはリポスト数・リポストした人が記録され、**引用を削除すると自動で解除**。引用の引用は不可 |
 | ソーシャル | フォロー / フォロワー、**ブロック**（タイムライン・検索・プロフィールから除外）、通知（いいね・リポスト・返信・フォロー、**種別フィルタ・個別 / 一括既読・未読件数バッジ（ホームで60秒ごとに更新）**） |
 | プロフィール | ヘッダ画像・アイコンの変更、外部リンク、利用開始日、投稿一覧 / いいね一覧 |
 | その他 | **ブックマーク一覧**、キーワード / `#タグ` 検索（**ポスト / ユーザーのタブ切替・フォロー**）、**「いま起きていること」（ハッシュタグ集計）** |
 | UX | 確認は画面内モーダル / トースト（`alert` 不使用）、**画像はライトボックスでプレビュー**（遷移しない）、拡張子なしの URL（`home` `settings` …）、ページ遷移のちらつき対策、**500px 以下のスマートフォン幅ではサイドバーの代わりに下部ナビ＋投稿ボタン（FAB）を表示**、**読み込み中表示と通信断時のエラー表示（無言失敗を解消）**、**テーマ（ダーク / ライト）切替** |
-| セキュリティ | CSP、レート制限（全体500/分・認証系20/分）、CSRF 多層防御、セッショントークンはハッシュ保存＋失効可能、アップロードの型/サイズ/寸法検証、パス・トラバーサル対策、ログイン失敗のアカウント単位ロック・ユーザー存在の時間差判別対策、動画入力の形式検証（ffmpeg の外部参照禁止）、**Gateway 構成では共有シークレット（`GATEWAY_SECRET`）で自宅 Origin への直接アクセスを遮断**、**Tor モードでは `X-Forwarded-For` を信用しない（レート制限キーの IP 偽装を防止／実 IP はシークレット検証済みの `X-Origin-Client-Ip` のみ）**、アップロードはレート制限＋同時実行数の上限＋未参照メディアの自動掃除（7日）、**投稿の自動モデレーション（Llama Guard）**、**外部リンクの検査と確認ページ**、**全アクセスの監査ログ** |
+| セキュリティ | CSP・HSTS（本番 HTTPS）、レート制限（全体500/分・認証系20/分・**登録10/時**）、CSRF 多層防御（`sec-fetch-site` ＋ **Origin 検証**）、セッショントークンはハッシュ保存＋失効可能、パスワードは **非同期 scrypt**、アップロードの型/サイズ/寸法検証、パス・トラバーサル対策、ログイン失敗のアカウント単位ロック・ユーザー存在の時間差判別対策、動画入力の形式検証（ffmpeg の外部参照禁止）、**メディアはアップロード本人のものだけ投稿へ添付可能**、**Tor モードでは `X-Forwarded-For` を信用しない（レート制限キーの IP 偽装を防止）**、アップロードはレート制限＋同時実行数の上限＋未参照メディアの自動掃除（7日）、通知は受信者あたり上限付き、**投稿の自動モデレーション（Llama Guard）**、**外部リンクの検査と確認ページ**、**全アクセスの監査ログ** |
 
 ## 環境変数
 
 | 変数 | 既定値 | 説明 |
 |---|---|---|
-| `PORT` | `3000` | サーバーの待受ポート |
+| `PORT` | `80` | サーバーの待受ポート |
+| `HOST` | 本番: `127.0.0.1` / 開発: 全制御 | 待受ホスト。本番はリバースプロキシ裏を前提にループバック |
+| `NODE_ENV` | （開発） | `production` で本番モード（静的配信を `dist/`、`trust proxy`、HSTS） |
+| `TOR_MODE` | `false` | `true` で Tor 隠しサービス向け（`X-Forwarded-For` を信用しない） |
 | `OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama のエンドポイント |
 | `MODERATION_MODEL` | `llama-guard3:1b` | 使用モデル（精度を上げるなら `llama-guard3:8b`） |
 | `MODERATION` | （有効） | `false` でモデレーション全体を無効化 |
@@ -54,7 +57,7 @@ npm run prod:gateway # 本番（Gateway 単体）  → minify(dist/) + NODE_ENV=
 | `MODERATION_RECHECK_MIN` | `60` | safe 判定の有効期間（分）。過ぎた投稿は次回スキャンで再判定 |
 | `ACCESS_LOG` | （有効） | `false` で監査ログを無効化 |
 | `ACCESS_LOG_DAYS` | `90` | 監査ログの保持日数（超過分を自動削除） |
-| `GATEWAY_SECRET` | （未設定） | Gateway 構成で自宅 Origin を外部から守る共有シークレット |
+| `FFMPEG_PATH` | `ffmpeg` | ffmpeg の実行パス |
 
 モデレーションは Ollama と `llama-guard3:1b` が必要です。
 
@@ -75,8 +78,8 @@ Ollama が起動していない場合もサーバーは通常どおり動作し�
 
 - データモデル … `Server/userStore.js` / `Server/postStore.js` などの Store 群
 - API … `Server/server.js` のルーティング（`/api/*`）
-- 認証・CSRF … `Server/auth.js`
-- 画像・動画処理 … `Server/media.js`
+- 認証・CSRF … `Server/auth.js` / `Server/userStore.js`
+- 画像・動画処理 … `Server/media.js` / `Server/mediaStore.js`
 - 自動モデレーション（Llama Guard / Ollama） … `Server/moderation.js`
 - 外部リンクの検査・確認ページ（`/out`） … `Server/linkGuard.js`
 - 監査ログ … `Server/accessLog.js`

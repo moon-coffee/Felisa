@@ -6,10 +6,8 @@
   "main": "Server/server.js",
   "scripts": {
     "start": "node Server/server.js",
-    "gateway": "node Gateway/server.js",
     "build": "node build.js",
-    "prod": "npm run build && cross-env NODE_ENV=production node Server/server.js",
-    "prod:gateway": "npm run build && cross-env NODE_ENV=production node Gateway/server.js"
+    "prod": "npm run build && cross-env NODE_ENV=production node Server/server.js"
   },
   "dependencies": {
     "express": "^4.21.2",

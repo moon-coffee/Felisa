@@ -86,22 +86,24 @@ function hostProblem(host) {
 /* ---------- DNS 解決 ---------- */
 
 async function dnsProblem(hostname) {
-    let addrs;
+    let timer = null;
     try {
-        addrs = await Promise.race([
+        const addrs = await Promise.race([
             dns.promises.lookup(hostname, { all: true, verbatim: true }),
-            new Promise((_, reject) =>
-                setTimeout(() => reject(new Error("dns-timeout")), DNS_TIMEOUT_MS)
-            ),
+            new Promise((_, reject) => {
+                timer = setTimeout(() => reject(new Error("dns-timeout")), DNS_TIMEOUT_MS);
+            }),
         ]);
+        if (!addrs || !addrs.length) return "このドメインを解決できませんでした。";
+        const bad = addrs.find((a) => !ipIsPublic(a.address));
+        if (bad) return `内部ネットワークを指すアドレス（${bad.address}）を含んでいます。`;
+        return null;
     } catch (err) {
         // 解決できない = 開けない（存在しないドメインへの誘導を止める）
         return "このドメインを解決できませんでした。";
+    } finally {
+        if (timer) clearTimeout(timer);
     }
-    if (!addrs || !addrs.length) return "このドメインを解決できませんでした。";
-    const bad = addrs.find((a) => !ipIsPublic(a.address));
-    if (bad) return `内部ネットワークを指すアドレス（${bad.address}）を含んでいます。`;
-    return null;
 }
 
 /* ---------- チェック本体 ---------- */

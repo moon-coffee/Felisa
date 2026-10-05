@@ -1,6 +1,5 @@
 const fs = require("fs");
 const path = require("path");
-const crypto = require("crypto");
 const express = require("express");
 const rateLimit = require("express-rate-limit");
 
@@ -12,7 +11,7 @@ const trendsRouter = require("./trends");
 const mediaRouter = require("./media");
 const mediaStore = require("./mediaStore");
 const session = require("./session");
-const { isSecureRequest, setClientIp } = require("./trust");
+const { isSecureRequest } = require("./trust");
 const accessLog = require("./accessLog");
 const moderation = require("./moderation");
 const linkGuard = require("./linkGuard");
@@ -28,9 +27,6 @@ const HOST = process.env.HOST || (isProd ? "127.0.0.1" : undefined);
 // Tor は HTTP プロキシではなく透過的な TCP 転送なので、リモート IP は
 // 実際には区別できず（かつヘッダは接続者が偽装できる）、IP ベースのレート制限は
 // IP 単位ではなく「全体共有」の枠として機能する（下記 trust proxy の節を参照）。
-// クラウド側 Gateway（Cloudflare Tunnel の先）から届いたリクエストだけを信頼するための共有秘密。
-// 未設定なら旧来どおり（Caddy 等のリバースプロキシに直接ぶら下げる単体構成）として振る舞う。
-const GATEWAY_SECRET = process.env.GATEWAY_SECRET
 
 const CLIENT_DIR = path.join(__dirname, "..", "Client");
 const DIST_DIR = path.join(__dirname, "..", "dist");
@@ -55,33 +51,18 @@ setInterval(() => mediaStore.sweepOrphans(), 12 * 60 * 60 * 1000).unref();
 
 app.disable("x-powered-by");
 
+if (isProd && HOST && HOST !== "127.0.0.1" && HOST !== "localhost" && HOST !== "::1") {
+    console.warn(
+        `[warn] 本番で ${HOST} に直接公開しています。` +
+            `リバースプロキシ無しでは X-Forwarded-For 偽装によるレート制限の回避が可能です。` +
+            `Caddy 等を前面に置き HOST=127.0.0.1 を推奨します。`
+    );
+}
+
 // 監査ログ（全リクエストの IP / UA / 時刻 / ページ / 操作）。
-// ゲートウェイのシークレット検証などで遮断されるリクエストも記録するため、
 // 他のミドルウェアより先に置く。記録自体は res.finish 時に行うため、
 // この時点ではまだ req.ip が確定していない（完了時に読み直す）。
 app.use(accessLog.middleware);
-
-// クラウド Gateway 経由の構成（GATEWAY_SECRET 設定時）:
-// Cloudflare Tunnel の先にいる Node には理論上誰でも到達しうるため、
-// 共有秘密ヘッダを持たないリクエストはここで遮断する。
-// 実クライアントIPは Gateway が計算済みの値（X-Origin-Client-Ip）を
-// req.ip として引き継ぐ（X-Forwarded-For の解釈には頼らない）。
-if (GATEWAY_SECRET) {
-    const secretBuf = Buffer.from(GATEWAY_SECRET);
-    app.use((req, res, next) => {
-        const provided = Buffer.from(String(req.headers["x-gateway-secret"] || ""));
-        const ok =
-            provided.length === secretBuf.length && crypto.timingSafeEqual(provided, secretBuf);
-        if (!ok) {
-            return res.status(403).type("txt").send("Forbidden");
-        }
-        // Gateway が計算した実クライアントIPを req.ip として確定させる。
-        // X-Forwarded-For を書き換えて trust proxy に解釈させる方式から変更したのは、
-        // Tor モードで trust proxy を切っているため（下記）。
-        setClientIp(req, req.headers["x-origin-client-ip"]);
-        next();
-    });
-}
 
 // Tor は HTTP プロキシではなく「クライアントの HTTP をそのまま届ける透過的な TCP
 // 転送」であり、HTTP ヘッダは送信者が書いたまま届く。つまり Tor 経由の
@@ -92,12 +73,9 @@ if (GATEWAY_SECRET) {
 //   - セッション一覧に表示される接続元 IP が偽装される
 // という問題が起きる。Tor モードでは X-Forwarded-For を一切信用しない。
 // （req.ip は接続元＝Tor のローカルアドレスになり、IP 単位の制限は全体共有に
-//  なる。これは docs の Tor モードの仕様どおりの挙動。）
-// clearnet（Cloudflare 等の TLS 終端）と Tor を同時に受ける構成では、
-// 経路ごとに Gateway を別ポートで起動して trust proxy の方針を分けることを推奨する。
-//
-// GATEWAY_SECRET 設定時: Gateway が計算した X-Origin-Client-Ip を req.ip に使う。
-// 未設定時（従来構成）: Caddy 等のリバースプロキシを1ホップ信頼する。
+//  なる。Tor モードの仕様どおりの挙動。）
+// 通常構成では、Caddy 等のリバースプロキシを1ホップ信頼する（本番は既定で
+// 127.0.0.1 待受が前提）。
 const trustedProxies = isTor ? false : isProd ? 1 : false;
 app.set("trust proxy", trustedProxies);
 
@@ -132,7 +110,10 @@ app.use((req, res, next) => {
     next();
 });
 
-// クロスサイトからの書き込みを拒否（対応ブラウザのみ・CSRF 対策の多層防御）
+// クロスサイトからの書き込みを拒否（CSRF 対策の多層防御）。
+// 1. sec-fetch-site（対応ブラウザのみ送る）
+// 2. Origin ヘッダ（送られてくる場合は同一オリジンであること）
+// ボディが JSON 専用で CORS 許可も無いため、古いブラウザ含め実質的に封じている。
 app.use("/api", (req, res, next) => {
     if (["POST", "PUT", "DELETE", "PATCH"].includes(req.method)) {
         const site = req.headers["sec-fetch-site"];
@@ -140,6 +121,23 @@ app.use("/api", (req, res, next) => {
             return res
                 .status(403)
                 .json({ ok: false, errors: { form: "不正なリクエストです。" } });
+        }
+        const origin = req.headers.origin;
+        if (origin) {
+            let originHost = "";
+            try {
+                originHost = new URL(origin).host;
+            } catch {
+                return res
+                    .status(403)
+                    .json({ ok: false, errors: { form: "不正なリクエストです。" } });
+            }
+            const host = String(req.headers.host || "");
+            if (originHost && host && originHost !== host) {
+                return res
+                    .status(403)
+                    .json({ ok: false, errors: { form: "不正なリクエストです。" } });
+            }
         }
     }
     next();
@@ -203,12 +201,24 @@ const imageLimiter = rateLimit({
 });
 for (const p of [
     "/api/login",
-    "/api/register",
     "/api/me/password",
     "/api/me/username",
 ]) {
     app.use(p, authLimiter);
 }
+// 登録はスパムアカウント生成に使われるため、認証系とは別に1時間あたりの上限を置く
+const registerLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: rateLimitValidate,
+    message: {
+        ok: false,
+        errors: { form: "新規登録が多すぎます。しばらく待ってから再度お試しください。" },
+    },
+});
+app.use("/api/register", registerLimiter, authLimiter);
 // アカウント削除もパスワード再確認を伴うため、総当たり対策として同じ制限を掛ける
 app.delete("/api/me", authLimiter);
 

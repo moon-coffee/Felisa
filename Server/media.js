@@ -24,8 +24,9 @@ function requireAuth(req, res) {
 
 // クライアントが canvas で PNG 化した画像を受け取る（body は express.raw で Buffer）
 router.post("/image", (req, res) => {
-    if (!requireAuth(req, res)) return;
-    const result = mediaStore.saveImagePng(req.body);
+    const user = requireAuth(req, res);
+    if (!user) return;
+    const result = mediaStore.saveImagePng(req.body, user.userId);
     if (result.error) {
         return res.status(400).json({ ok: false, errors: { form: result.error } });
     }
@@ -34,7 +35,8 @@ router.post("/image", (req, res) => {
 
 // 動画: サーバー側で MP4 / 480p / メタデータ削除に再エンコード
 router.post("/video", async (req, res) => {
-    if (!requireAuth(req, res)) return;
+    const user = requireAuth(req, res);
+    if (!user) return;
     if (!mediaStore.HAS_FFMPEG) {
         return res.status(501).json({
             ok: false,
@@ -49,7 +51,7 @@ router.post("/video", async (req, res) => {
     }
     activeTranscodes++;
     try {
-        const result = await mediaStore.saveVideo(req.body);
+        const result = await mediaStore.saveVideo(req.body, user.userId);
         if (result.error) {
             const code = result.code === "no_ffmpeg" ? 501 : 400;
             return res.status(code).json({ ok: false, errors: { form: result.error } });

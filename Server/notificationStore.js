@@ -7,6 +7,9 @@ const FILE = path.join(DATA_DIR, "notifications.json");
 // レコード: { id, userId(受信者), type: "like"|"repost"|"follow"|"reply",
 //            actor(行為者), postId|null, createdAt, read }
 
+// 受信者1人あたりの保持上限（モデレーション警告など無制限に積まれるのを防ぐ）
+const MAX_PER_USER = 500;
+
 function readAll() {
     return readArray(FILE);
 }
@@ -51,7 +54,19 @@ function add({ userId, type, actor, postId = null, detail = null, dedupe = true 
         read: false,
     };
     next.push(row);
-    writeAll(next);
+
+    // 受信者ごとの上限超過分（古い順）を捨てる
+    const key = String(userId).toLowerCase();
+    const mine = next
+        .filter((r) => eq(r.userId, key))
+        .sort((a, b) => a.createdAt - b.createdAt);
+    if (mine.length > MAX_PER_USER) {
+        const drop = new Set(mine.slice(0, mine.length - MAX_PER_USER).map((r) => r.id));
+        const kept = next.filter((r) => !drop.has(r.id));
+        writeAll(kept);
+    } else {
+        writeAll(next);
+    }
     return row;
 }
 

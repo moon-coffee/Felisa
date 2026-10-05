@@ -4,14 +4,20 @@ const path = require("path");
 const crypto = require("crypto");
 const { spawnSync, spawn } = require("child_process");
 const pngUtil = require("./pngUtil");
+const { writeFileAtomic } = require("./jsonStore");
 
 const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
+// アップロード元（誰がどのファイルをいつ作ったか）の記録。
+// 投稿への添付時に本人確認に使い、他人のアップロードを勝手に自分の投稿へ
+// 紐付けたり、未投稿ファイルを消させたりしないようにする。
+const INDEX_FILE = path.join(DATA_DIR, "mediaIndex.json");
 
 const IMAGE_MAX_BYTES = 8 * 1024 * 1024; // 8MB（クライアントで PNG 化済み・可逆なので大きめ）
 const VIDEO_MAX_BYTES = 80 * 1024 * 1024;
 const VIDEO_MAX_SECONDS = 140;
 const TRANSCODE_TIMEOUT_MS = 180 * 1000;
+const INDEX_MAX = 50000; // 索引の上限（異常な肥大化の防止）
 
 const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
 
@@ -29,6 +35,57 @@ function ensureDir() {
     if (!fs.existsSync(MEDIA_DIR)) fs.mkdirSync(MEDIA_DIR, { recursive: true });
 }
 
+function readIndex() {
+    try {
+        const parsed = JSON.parse(fs.readFileSync(INDEX_FILE, "utf8"));
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+        return {};
+    }
+}
+
+function writeIndex(index) {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    const keys = Object.keys(index);
+    if (keys.length > INDEX_MAX) {
+        // 古いエントリから捨てる（uploadedAt の昇順）
+        keys
+            .sort((a, b) => (index[a].uploadedAt || 0) - (index[b].uploadedAt || 0))
+            .slice(0, keys.length - INDEX_MAX)
+            .forEach((k) => delete index[k]);
+    }
+    writeFileAtomic(INDEX_FILE, JSON.stringify(index));
+}
+
+function recordUpload(id, uploader, type) {
+    const index = readIndex();
+    index[id] = {
+        uploader: String(uploader || ""),
+        uploadedAt: Date.now(),
+        type: type || (id.endsWith(".mp4") ? "video" : "image"),
+    };
+    writeIndex(index);
+}
+
+function forgetIds(ids) {
+    const index = readIndex();
+    let changed = false;
+    for (const id of ids) {
+        if (index[id]) {
+            delete index[id];
+            changed = true;
+        }
+    }
+    if (changed) writeIndex(index);
+}
+
+// 添付してよいか（アップロード本人、または索引に無い旧データ）
+function belongsTo(id, userId) {
+    const entry = readIndex()[id];
+    if (!entry || !entry.uploader) return true;
+    return entry.uploader.toLowerCase() === String(userId || "").toLowerCase();
+}
+
 const NAME_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(png|mp4)$/;
 
 function exists(id) {
@@ -44,7 +101,7 @@ function resolve(id) {
 }
 
 // クライアントが canvas で再エンコードした PNG を検証して保存
-function saveImagePng(buf) {
+function saveImagePng(buf, uploader) {
     if (!Buffer.isBuffer(buf) || buf.length === 0) {
         return { error: "画像データが空です。" };
     }
@@ -58,6 +115,7 @@ function saveImagePng(buf) {
     ensureDir();
     const id = crypto.randomUUID() + ".png";
     fs.writeFileSync(path.join(MEDIA_DIR, id), buf);
+    recordUpload(id, uploader, "image");
     return { media: { type: "image", id, width: info.width, height: info.height } };
 }
 
@@ -71,7 +129,7 @@ function looksLikeVideo(buf) {
 }
 
 // 動画を MP4 / 480p 上限 / メタデータ削除で再エンコードして保存
-function saveVideo(buf) {
+function saveVideo(buf, uploader) {
     return new Promise((resolvePromise) => {
         if (!HAS_FFMPEG) {
             return resolvePromise({
@@ -141,6 +199,7 @@ function saveVideo(buf) {
             clearTimeout(timer);
             fs.rmSync(inPath, { force: true });
             if (code === 0 && fs.existsSync(outPath)) {
+                recordUpload(id, uploader, "video");
                 resolvePromise({ media: { type: "video", id } });
             } else {
                 fs.rmSync(outPath, { force: true });
@@ -151,11 +210,14 @@ function saveVideo(buf) {
 }
 
 function removeFiles(ids) {
+    const valid = [];
     for (const id of ids) {
         if (NAME_RE.test(id)) {
             fs.rmSync(path.join(MEDIA_DIR, id), { force: true });
+            valid.push(id);
         }
     }
+    if (valid.length) forgetIds(valid);
 }
 
 // 投稿から参照されていない古いメディアを削除する（ディスク枯渇対策）。
@@ -196,6 +258,7 @@ function sweepOrphans(maxAgeMs = ORPHAN_MAX_AGE_MS) {
             const st = fs.statSync(file);
             if (st.mtimeMs >= cutoff) continue;
             fs.rmSync(file, { force: true });
+            forgetIds([name]);
             result.removed += 1;
         } catch {
             // 他のプロセスが触っている等は無視
@@ -210,6 +273,7 @@ module.exports = {
     VIDEO_MAX_BYTES,
     exists,
     resolve,
+    belongsTo,
     saveImagePng,
     saveVideo,
     removeFiles,
