@@ -100,6 +100,14 @@ function findByUserId(userId) {
     return readUsers().find((u) => lc(u.userId) === lc(userId));
 }
 
+function statistics() {
+    const users = readUsers();
+    return {
+        total: users.length,
+        createdAt: users.map((user) => user.createdAt).filter(Number.isFinite),
+    };
+}
+
 // userId / displayName の部分一致でユーザーを検索する（大文字小文字は無視）。
 // hidden（blocks.hiddenFor の集合）に入っている ID は、自分がブロックした／
 // ブロックされた双方の方向で対象外になる。表示上限は呼び出し側で切る。
@@ -227,6 +235,7 @@ function renameUser(oldId, newId) {
 
 module.exports = {
     findByUserId,
+    statistics,
     searchUsers,
     createUser,
     updateProfile,

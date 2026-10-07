@@ -9,12 +9,14 @@ const notificationsRouter = require("./notifications");
 const searchRouter = require("./search");
 const trendsRouter = require("./trends");
 const mediaRouter = require("./media");
+const adminRouter = require("./admin");
 const mediaStore = require("./mediaStore");
 const session = require("./session");
 const { isSecureRequest } = require("./trust");
 const accessLog = require("./accessLog");
 const moderation = require("./moderation");
 const linkGuard = require("./linkGuard");
+const adminStore = require("./adminStore");
 
 const app = express();
 const PORT = process.env.PORT || 80;
@@ -290,6 +292,7 @@ app.use("/api/notifications", apiLimiter, notificationsRouter);
 app.use("/api/search", apiLimiter, searchRouter);
 app.use("/api/trends", apiLimiter, trendsRouter);
 app.use("/api/media", apiLimiter, mediaRouter);
+app.use("/api/admin", apiLimiter, adminRouter);
 app.use("/api", apiLimiter, authRouter);
 
 // 投稿中の URL へのアクセス。必ずここを経由して安全性を確認する
@@ -309,6 +312,14 @@ function gate(file) {
         sendPage(res, file);
     };
 }
+function gateAdmin(file) {
+    return (req, res) => {
+        const userId = session.currentUserId(req);
+        if (!userId) return res.redirect("/login");
+        if (!adminStore.has(userId)) return res.status(404).type("txt").send("Not Found");
+        sendPage(res, file);
+    };
+}
 
 // .html を含む URL は拡張子なしへ 301
 const CLEAN = {
@@ -316,6 +327,7 @@ const CLEAN = {
     "/signin.html": "/signin",
     "/home.html": "/home",
     "/settings.html": "/settings",
+    "/admin.html": "/admin",
     "/bookmarks.html": "/bookmarks",
     "/notifications.html": "/notifications",
 };
@@ -325,6 +337,7 @@ app.get("/login", (req, res) => sendPage(res, "login.html"));
 app.get("/signin", (req, res) => sendPage(res, "signin.html"));
 app.get("/home", gate("home.html"));
 app.get("/settings", gate("settings.html"));
+app.get("/admin", gateAdmin("admin.html"));
 app.get("/bookmarks", gate("bookmarks.html"));
 app.get("/notifications", gate("notifications.html"));
 
@@ -344,6 +357,7 @@ const RESERVED = new Set([
     "status",
     "search",
     "settings",
+    "admin",
     "bookmarks",
     "notifications",
     "login",

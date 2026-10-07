@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^git status --short && printf '\\\\n--- root ---\\\\n' && ls -la$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

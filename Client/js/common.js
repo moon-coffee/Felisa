@@ -1363,6 +1363,25 @@
         document.querySelectorAll('[data-nav="profile"]').forEach((pnav) => {
             pnav.href = "/" + encodeURIComponent(me.userId);
         });
+        if (me.isAdmin) {
+            document.querySelectorAll(".nav, .mobile-nav").forEach((nav) => {
+                if (nav.querySelector("[data-admin-nav]")) return;
+                const item = document.createElement("a");
+                item.href = "/admin";
+                item.className = "nav-item" + (location.pathname === "/admin" ? " active" : "");
+                item.setAttribute("data-admin-nav", "");
+                if (location.pathname === "/admin") item.setAttribute("aria-current", "page");
+                const icon = document.createElement("i");
+                icon.className = "fa-solid fa-chart-line";
+                icon.setAttribute("aria-hidden", "true");
+                const label = document.createElement("span");
+                label.textContent = "管理パネル";
+                item.append(icon, label);
+                const settings = nav.querySelector('a[href="/settings"]');
+                if (settings) settings.before(item);
+                else nav.appendChild(item);
+            });
+        }
         SNS.setBadge(me.unreadNotifications || 0);
     };
     SNS.loadMe = async function (opts) {

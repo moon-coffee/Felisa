@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <base href="/">
+    <style>html,body{background:#252525}</style>
+    <script src="js/theme.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900&display=swap" media="print" data-lazy-css>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.css" media="print" data-lazy-css>
+    <link rel="stylesheet" href="home.css">
+    <script defer src="js/defer-css.js"></script>
+    <title>管理パネル | Felisa</title>
+</head>
+<body>
+    <div class="app">
+        <header class="sidebar" data-shell-sidebar></header>
+        <main class="feed admin-feed">
+            <div class="feed-header">
+                <h1>管理パネル</h1>
+                <p class="admin-header-note">サービスの利用状況と最近の動きを確認できます。</p>
+            </div>
+            <section class="admin-content" aria-labelledby="admin-overview">
+                <div class="admin-section-heading">
+                    <div>
+                        <p class="settings-eyebrow">OVERVIEW</p>
+                        <h2 id="admin-overview">サービス概要</h2>
+                    </div>
+                    <button type="button" class="btn btn-outline btn-sm" id="admin-refresh">
+                        <i class="fa-solid fa-rotate" aria-hidden="true"></i> 更新
+                    </button>
+                </div>
+                <p class="admin-updated" id="admin-updated">統計を読み込み中…</p>
+                <div class="admin-error" id="admin-error" role="alert" hidden></div>
+                <div class="admin-stat-grid" id="admin-stats" aria-live="polite"></div>
+                <section class="admin-activity" aria-labelledby="admin-activity-title">
+                    <div class="admin-section-heading">
+                        <div>
+                            <p class="settings-eyebrow">LAST 7 DAYS</p>
+                            <h2 id="admin-activity-title">日別のアクティビティ</h2>
+                        </div>
+                    </div>
+                    <div class="admin-chart" id="admin-chart"></div>
+                    <div class="admin-chart-legend">
+                        <span><i class="admin-legend-users"></i>新規ユーザー</span>
+                        <span><i class="admin-legend-posts"></i>投稿</span>
+                    </div>
+                </section>
+            </section>
+        </main>
+        <aside class="aside" data-shell-aside></aside>
+    </div>
+    <script src="js/common.js"></script>
+    <script src="js/admin.js"></script>
+</body>
+</html>
