@@ -104,7 +104,11 @@ function statistics() {
     const users = readUsers();
     return {
         total: users.length,
-        createdAt: users.map((user) => user.createdAt).filter(Number.isFinite),
+        createdAt: users
+            .map((user) =>
+                user.createdAt ? new Date(user.createdAt).getTime() : NaN
+            )
+            .filter(Number.isFinite),
     };
 }
 
