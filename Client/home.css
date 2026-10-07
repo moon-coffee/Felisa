@@ -643,6 +643,7 @@ a.quote-card:hover {
 .pa--report:hover { color: var(--like); }
 .pa--report:hover i { background-color: rgba(var(--like-rgb), 0.12); }
 .pa--report:disabled { opacity: 0.45; cursor: default; }
+.pa-report-label { font-size: 12px; }
 
 .feed-end {
     padding: 32px 16px;
@@ -1061,6 +1062,98 @@ a.quote-card:hover {
     padding: 12px 20px 24px;
 }
 
+.modal-card--policy {
+    display: flex;
+    flex-direction: column;
+    max-width: 900px;
+    max-height: calc(100vh - 80px);
+}
+
+.modal-card--policy .modal-head {
+    flex: 0 0 auto;
+}
+
+.modal-card--policy .modal-head h2 {
+    margin: 0;
+}
+
+.policy-content {
+    overflow: auto;
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.8;
+    overflow-wrap: anywhere;
+}
+
+.policy-content h1,
+.policy-content h2,
+.policy-content h3,
+.policy-content h4,
+.policy-content h5,
+.policy-content h6 {
+    margin: 1.5em 0 0.6em;
+    line-height: 1.4;
+}
+
+.policy-content h1 { font-size: 1.65em; }
+.policy-content h2 { font-size: 1.4em; }
+.policy-content h3 { font-size: 1.2em; }
+.policy-content p,
+.policy-content ul,
+.policy-content ol,
+.policy-content blockquote {
+    margin: 0.8em 0;
+}
+
+.policy-content li {
+    padding-left: 0.2em;
+}
+
+.policy-content a {
+    color: var(--accent);
+    text-decoration: underline;
+}
+
+.policy-content code {
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+    background: var(--panel);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.policy-content table {
+    width: 100%;
+    margin: 1em 0;
+    border-collapse: collapse;
+}
+
+.policy-content th,
+.policy-content td {
+    padding: 8px;
+    border: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+}
+
+.policy-content th {
+    background: var(--panel);
+}
+
+.policy-content blockquote {
+    padding-left: 1em;
+    border-left: 3px solid var(--border);
+    color: var(--text-dim);
+}
+
+.policy-content hr {
+    border: 0;
+    border-top: 1px solid var(--border);
+}
+
+.policy-content.is-error {
+    color: var(--danger, #d33);
+}
+
 .modal-head {
     display: flex;
     align-items: center;
@@ -1136,6 +1229,23 @@ a.quote-card:hover {
     }
     .aside {
         display: none;
+    }
+}
+
+@media (max-width: 600px) {
+    .modal {
+        padding: 16px 8px;
+    }
+    .modal-card--policy {
+        max-height: calc(100vh - 32px);
+        padding: 10px 14px 18px;
+    }
+    .policy-content {
+        font-size: 13px;
+    }
+    .policy-content th,
+    .policy-content td {
+        padding: 5px;
     }
 }
 

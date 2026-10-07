@@ -186,6 +186,185 @@
     }
     SNS.dialogize = dialogize;
 
+    function markdownInline(parent, text) {
+        const pattern = /\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)|`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*]+)\*|_([^_]+)_/g;
+        let last = 0;
+        let match;
+        while ((match = pattern.exec(text)) !== null) {
+            if (match.index > last) parent.appendChild(document.createTextNode(text.slice(last, match.index)));
+            if (match[1] !== undefined) {
+                const href = match[2];
+                if (/^(https?:\/\/|mailto:|\/(?!\/)|#)/i.test(href)) {
+                    const link = document.createElement("a");
+                    link.href = href;
+                    link.textContent = match[1];
+                    if (/^https?:\/\//i.test(href)) {
+                        link.target = "_blank";
+                        link.rel = "noopener noreferrer";
+                    }
+                    if (match[3]) link.title = match[3];
+                    parent.appendChild(link);
+                } else {
+                    parent.appendChild(document.createTextNode(match[0]));
+                }
+            } else {
+                const tag = match[4] !== undefined ? "code"
+                    : (match[5] !== undefined || match[6] !== undefined) ? "strong" : "em";
+                const element = document.createElement(tag);
+                element.textContent = match[4] || match[5] || match[6] || match[7] || match[8];
+                parent.appendChild(element);
+            }
+            last = pattern.lastIndex;
+        }
+        if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
+    }
+
+    function renderMarkdown(target, markdown) {
+        const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
+        let i = 0;
+        const isTableRule = (line) => /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+        const cells = (line) => line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+
+        while (i < lines.length) {
+            const line = lines[i];
+            if (!line.trim()) {
+                i++;
+                continue;
+            }
+            const heading = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+            if (heading) {
+                const element = document.createElement("h" + heading[1].length);
+                markdownInline(element, heading[2]);
+                target.appendChild(element);
+                i++;
+                continue;
+            }
+            if (/^\s*(---+|___+|\*\*\*+)\s*$/.test(line)) {
+                target.appendChild(document.createElement("hr"));
+                i++;
+                continue;
+            }
+            if (i + 1 < lines.length && line.includes("|") && isTableRule(lines[i + 1])) {
+                const table = document.createElement("table");
+                const thead = document.createElement("thead");
+                const headerRow = document.createElement("tr");
+                cells(line).forEach((text) => {
+                    const cell = document.createElement("th");
+                    markdownInline(cell, text);
+                    headerRow.appendChild(cell);
+                });
+                thead.appendChild(headerRow);
+                table.appendChild(thead);
+                i += 2;
+                const tbody = document.createElement("tbody");
+                while (i < lines.length && lines[i].includes("|") && lines[i].trim()) {
+                    const row = document.createElement("tr");
+                    cells(lines[i]).forEach((text) => {
+                        const cell = document.createElement("td");
+                        markdownInline(cell, text);
+                        row.appendChild(cell);
+                    });
+                    tbody.appendChild(row);
+                    i++;
+                }
+                table.appendChild(tbody);
+                target.appendChild(table);
+                continue;
+            }
+            const list = /^(\s*)([-*+]|\d+\.)\s+(.+)$/.exec(line);
+            if (list) {
+                const ordered = /\d/.test(list[2][0]);
+                const element = document.createElement(ordered ? "ol" : "ul");
+                while (i < lines.length) {
+                    const item = /^(\s*)([-*+]|\d+\.)\s+(.+)$/.exec(lines[i]);
+                    if (!item || /\d/.test(item[2][0]) !== ordered) break;
+                    const li = document.createElement("li");
+                    li.style.marginLeft = Math.min(Math.floor(item[1].length / 2), 6) + "em";
+                    markdownInline(li, item[3]);
+                    element.appendChild(li);
+                    i++;
+                }
+                target.appendChild(element);
+                continue;
+            }
+            if (/^\s*>\s?/.test(line)) {
+                const quote = document.createElement("blockquote");
+                while (i < lines.length && /^\s*>\s?/.test(lines[i])) {
+                    const paragraph = document.createElement("p");
+                    markdownInline(paragraph, lines[i].replace(/^\s*>\s?/, ""));
+                    quote.appendChild(paragraph);
+                    i++;
+                }
+                target.appendChild(quote);
+                continue;
+            }
+            const paragraph = document.createElement("p");
+            while (i < lines.length && lines[i].trim() &&
+                !/^(#{1,6})\s+/.test(lines[i]) &&
+                !/^\s*(---+|___+|\*\*\*+)\s*$/.test(lines[i]) &&
+                !/^(\s*)([-*+]|\d+\.)\s+/.test(lines[i]) &&
+                !(i + 1 < lines.length && lines[i].includes("|") && isTableRule(lines[i + 1]))) {
+                if (paragraph.childNodes.length) paragraph.appendChild(document.createElement("br"));
+                markdownInline(paragraph, lines[i]);
+                i++;
+            }
+            target.appendChild(paragraph);
+        }
+    }
+
+    SNS.openPolicy = async function (url, title) {
+        const back = document.createElement("div");
+        back.className = "modal";
+        const card = document.createElement("section");
+        card.className = "modal-card modal-card--policy";
+        const head = document.createElement("div");
+        head.className = "modal-head";
+        const heading = document.createElement("h2");
+        heading.textContent = title || "ポリシー";
+        const closeButton = document.createElement("button");
+        closeButton.type = "button";
+        closeButton.className = "btn btn-outline";
+        closeButton.textContent = "閉じる";
+        head.append(heading, closeButton);
+        const content = document.createElement("article");
+        content.className = "policy-content";
+        content.setAttribute("aria-live", "polite");
+        content.textContent = "読み込み中…";
+        card.append(head, content);
+        back.appendChild(card);
+        document.body.appendChild(back);
+        const close = () => {
+            restore();
+            back.remove();
+        };
+        const restore = dialogize(back, close);
+        closeButton.addEventListener("click", close);
+        back.addEventListener("click", (event) => {
+            if (event.target === back) close();
+        });
+        closeButton.focus();
+
+        try {
+            const response = await fetch(url, { credentials: "same-origin" });
+            if (!response.ok) throw new Error("ポリシーを読み込めませんでした（" + response.status + "）。");
+            const markdown = await response.text();
+            content.textContent = "";
+            renderMarkdown(content, markdown);
+        } catch (error) {
+            content.textContent = error.message || "ポリシーを読み込めませんでした。";
+            content.classList.add("is-error");
+        }
+    };
+
+    document.addEventListener("click", (event) => {
+        const link = event.target.closest('a[href^="/help/policies/"]');
+        if (!link || event.defaultPrevented || event.button !== 0 ||
+            event.metaKey || event.ctrlKey || event.shiftKey || event.altKey ||
+            (link.target && link.target !== "_self")) return;
+        event.preventDefault();
+        SNS.openPolicy(link.pathname, link.textContent.trim());
+    });
+
     SNS.confirm = function (opts) {
         opts = opts || {};
         return new Promise((resolve) => {
@@ -755,7 +934,7 @@
             report.dataset.act = "report";
             report.title = "このポストを通報";
             report.setAttribute("aria-label", "このポストを通報");
-            report.innerHTML = '<i class="fa-regular fa-flag" aria-hidden="true"></i>';
+            report.innerHTML = '<i class="fa-regular fa-flag" aria-hidden="true"></i><span class="pa-report-label">通報</span>';
             actions.appendChild(report);
         }
         body.appendChild(actions);
