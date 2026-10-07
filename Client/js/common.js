@@ -228,6 +228,98 @@
         });
     };
 
+    SNS.reportTarget = function (target) {
+        return new Promise((resolve) => {
+            const back = document.createElement("div");
+            back.className = "modal";
+            const card = document.createElement("form");
+            card.className = "modal-card";
+            const head = document.createElement("div");
+            head.className = "modal-head";
+            const title = document.createElement("h2");
+            title.textContent = "通報する";
+            head.appendChild(title);
+            const intro = document.createElement("p");
+            intro.className = "modal-msg";
+            intro.textContent = "通報内容は管理者が確認します。緊急の危険がある場合は、警察などの公的窓口にもご相談ください。";
+            const reasonField = document.createElement("label");
+            reasonField.className = "field";
+            const reasonLabel = document.createElement("span");
+            reasonLabel.textContent = "通報理由";
+            const reason = document.createElement("select");
+            reason.required = true;
+            reason.innerHTML =
+                '<option value="">選択してください</option>' +
+                '<option value="harassment">嫌がらせ・脅迫</option>' +
+                '<option value="illegal">違法または危険な内容</option>' +
+                '<option value="child_safety">児童の安全に関する懸念</option>' +
+                '<option value="spam">スパム・なりすまし</option>' +
+                '<option value="privacy">個人情報・権利侵害</option>' +
+                '<option value="other">その他の規約違反</option>';
+            reasonField.append(reasonLabel, reason);
+            const detailField = document.createElement("label");
+            detailField.className = "field";
+            const detailLabel = document.createElement("span");
+            detailLabel.textContent = "補足（任意・1000文字以内）";
+            const detail = document.createElement("textarea");
+            detail.maxLength = 1000;
+            detail.rows = 4;
+            detailField.append(detailLabel, detail);
+            const actions = document.createElement("div");
+            actions.className = "modal-actions";
+            const cancel = document.createElement("button");
+            cancel.type = "button";
+            cancel.className = "btn btn-outline";
+            cancel.textContent = "キャンセル";
+            const submit = document.createElement("button");
+            submit.type = "submit";
+            submit.className = "btn btn-danger";
+            submit.textContent = "通報を送信";
+            actions.append(cancel, submit);
+            card.append(head, intro, reasonField, detailField, actions);
+            back.appendChild(card);
+            document.body.appendChild(back);
+
+            const close = (value) => {
+                restore();
+                back.remove();
+                resolve(value);
+            };
+            const restore = SNS.dialogize(back, close);
+            cancel.addEventListener("click", () => close(false));
+            back.addEventListener("click", (event) => {
+                if (event.target === back) close(false);
+            });
+            card.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                if (!reason.value) {
+                    reason.focus();
+                    return;
+                }
+                submit.disabled = true;
+                submit.textContent = "送信中…";
+                const res = await SNS.api("POST", "/api/reports", {
+                    targetType: target.type,
+                    targetId: target.id,
+                    reason: reason.value,
+                    detail: detail.value,
+                });
+                if (res.status === 401) {
+                    close(false);
+                    location.href = "/login";
+                } else if (res.data && res.data.ok) {
+                    close(true);
+                    SNS.notify("通報を受け付けました");
+                } else {
+                    SNS.notify(SNS.failMessage(res.data, "通報を送信できませんでした"), "error");
+                    submit.disabled = false;
+                    submit.textContent = "通報を送信";
+                }
+            });
+            reason.focus();
+        });
+    };
+
     // 選択肢を並べたモーダル（リポスト / 引用の選択など）。
     // items: [{ label, value, kind: "solid"|"outline"|"danger" }]
     // 返り値: 選択した value / キャンセル・Esc なら null
@@ -656,6 +748,16 @@
         actions.appendChild(
             actionButton("share", "fa-solid fa-arrow-up-from-bracket", null)
         );
+        if (!post.mine && post.id) {
+            const report = document.createElement("button");
+            report.type = "button";
+            report.className = "pa pa--report";
+            report.dataset.act = "report";
+            report.title = "このポストを通報";
+            report.setAttribute("aria-label", "このポストを通報");
+            report.innerHTML = '<i class="fa-regular fa-flag" aria-hidden="true"></i>';
+            actions.appendChild(report);
+        }
         body.appendChild(actions);
 
         row.appendChild(body);
@@ -880,6 +982,10 @@
                 if (act === "reply") location.href = "/status/" + encodeURIComponent(id);
                 else if (act === "share") share(id);
                 else if (act === "delete") await doDelete(id, article);
+                else if (act === "report") {
+                    const done = await SNS.reportTarget({ type: "post", id });
+                    if (done) actEl.disabled = true;
+                }
                 else if (act === "repost") {
                     // リポスト済みなら解除、未リポストなら「リポスト / 引用」を選択
                     if (actEl.classList.contains("is-active")) {
@@ -1304,8 +1410,9 @@
             '<input type="search" placeholder="検索" aria-label="検索"></form>' +
             '<section class="card"><h2>いま起きていること</h2>' +
             '<div class="trends" data-trends><div class="trend-empty">読み込み中…</div></div></section>' +
-            '<footer class="aside-footer"><span>利用規約</span><span>プライバシー</span>' +
-            "<span>Cookie</span><span>© 2026 Felisa</span></footer></div>"
+            '<footer class="aside-footer"><a href="/help">ヘルプセンター・お問い合わせ</a>' +
+            '<a href="/help/policies/terms">利用規約</a><a href="/help/policies/privacy">プライバシー</a>' +
+            '<a href="/help/policies/cookies">Cookie</a><span>© 2026 Felisa</span></footer></div>'
         );
     }
 

@@ -47,6 +47,26 @@
                         <span><i class="admin-legend-posts"></i>投稿</span>
                     </div>
                 </section>
+                <section class="admin-activity" aria-labelledby="admin-reports-title">
+                    <div class="admin-section-heading">
+                        <div>
+                            <p class="settings-eyebrow">SAFETY</p>
+                            <h2 id="admin-reports-title">ユーザー通報</h2>
+                        </div>
+                    </div>
+                    <div class="admin-support-list" id="admin-reports" aria-live="polite">通報を読み込み中…</div>
+                </section>
+                <section class="admin-activity" aria-labelledby="admin-inquiries-title">
+                    <div class="admin-section-heading">
+                        <div>
+                            <p class="settings-eyebrow">SUPPORT</p>
+                            <h2 id="admin-inquiries-title">お問い合わせ</h2>
+                        </div>
+                        <button type="button" class="btn btn-outline btn-sm" id="admin-support-refresh">更新</button>
+                    </div>
+                    <div class="admin-support-list" id="admin-inquiries" aria-live="polite">お問い合わせを読み込み中…</div>
+                    <div class="admin-error" id="admin-support-error" role="alert" hidden></div>
+                </section>
             </section>
         </main>
         <aside class="aside" data-shell-aside></aside>

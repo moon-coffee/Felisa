@@ -4,6 +4,7 @@ const accessLog = require("./accessLog");
 const postStore = require("./postStore");
 const session = require("./session");
 const userStore = require("./userStore");
+const supportStore = require("./supportStore");
 
 const router = express.Router();
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -69,6 +70,34 @@ router.get("/stats", requireAdmin, (req, res) => {
         },
         activity: series,
     });
+});
+
+router.get("/reports", requireAdmin, (req, res) => {
+    accessLog.note(req, "通報一覧表示");
+    res.json({ ok: true, reports: supportStore.listReports() });
+});
+
+router.put("/reports/:id/review", requireAdmin, (req, res) => {
+    const report = supportStore.reviewReport(req.params.id);
+    if (!report) {
+        return res.status(404).json({ ok: false, errors: { form: "通報が見つかりません。" } });
+    }
+    accessLog.note(req, "通報を確認済みに変更");
+    return res.json({ ok: true, report });
+});
+
+router.get("/inquiries", requireAdmin, (req, res) => {
+    accessLog.note(req, "お問い合わせ一覧表示");
+    res.json({ ok: true, inquiries: supportStore.listInquiries() });
+});
+
+router.put("/inquiries/:id/review", requireAdmin, (req, res) => {
+    const inquiry = supportStore.reviewInquiry(req.params.id);
+    if (!inquiry) {
+        return res.status(404).json({ ok: false, errors: { form: "お問い合わせが見つかりません。" } });
+    }
+    accessLog.note(req, "お問い合わせを確認済みに変更");
+    return res.json({ ok: true, inquiry });
 });
 
 module.exports = router;

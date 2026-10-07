@@ -10,6 +10,7 @@ const searchRouter = require("./search");
 const trendsRouter = require("./trends");
 const mediaRouter = require("./media");
 const adminRouter = require("./admin");
+const support = require("./support");
 const mediaStore = require("./mediaStore");
 const session = require("./session");
 const { isSecureRequest } = require("./trust");
@@ -17,6 +18,22 @@ const accessLog = require("./accessLog");
 const moderation = require("./moderation");
 const linkGuard = require("./linkGuard");
 const adminStore = require("./adminStore");
+const CONTACT_LIMIT = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: process.env.TOR_MODE === "true" ? { xForwardedForHeader: false } : true,
+    message: { ok: false, errors: { form: "お問い合わせの送信が多すぎます。時間をおいて再度お試しください。" } },
+});
+const reportLimit = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: process.env.TOR_MODE === "true" ? { xForwardedForHeader: false } : true,
+    message: { ok: false, errors: { form: "通報の送信が多すぎます。時間をおいて再度お試しください。" } },
+});
 
 const app = express();
 const PORT = process.env.PORT || 80;
@@ -293,6 +310,8 @@ app.use("/api/search", apiLimiter, searchRouter);
 app.use("/api/trends", apiLimiter, trendsRouter);
 app.use("/api/media", apiLimiter, mediaRouter);
 app.use("/api/admin", apiLimiter, adminRouter);
+app.use("/api/support/contact", CONTACT_LIMIT, apiLimiter, support.contactRouter);
+app.use("/api/reports", reportLimit, apiLimiter, support.reportRouter);
 app.use("/api", apiLimiter, authRouter);
 
 // 投稿中の URL へのアクセス。必ずここを経由して安全性を確認する
@@ -340,6 +359,21 @@ app.get("/settings", gate("settings.html"));
 app.get("/admin", gateAdmin("admin.html"));
 app.get("/bookmarks", gate("bookmarks.html"));
 app.get("/notifications", gate("notifications.html"));
+app.get("/help", (req, res) => sendPage(res, "help.html"));
+const POLICY_FILES = {
+    terms: "Terms_of_service.md",
+    privacy: "Privacy_policy.md",
+    cookies: "Cookie_policy.md",
+    "child-safety": "Child_safety_policy.md",
+};
+app.get("/help/policies/:name", (req, res) => {
+    const filename = POLICY_FILES[req.params.name];
+    if (!filename) return res.status(404).type("txt").send("Not Found");
+    res.type("text/plain; charset=utf-8");
+    res.setHeader("Content-Disposition", "inline");
+    res.setHeader("Cache-Control", "no-store");
+    return res.sendFile(path.join(__dirname, "..", "Important", filename));
+});
 
 app.use(express.static(STATIC_DIR));
 
@@ -360,6 +394,7 @@ const RESERVED = new Set([
     "admin",
     "bookmarks",
     "notifications",
+    "help",
     "login",
     "signin",
     "home",

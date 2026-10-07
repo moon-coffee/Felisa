@@ -1,0 +1,180 @@
+.help-page {
+    width: min(100% - 32px, 760px);
+    margin: 0 auto;
+    padding: 18px 0 48px;
+}
+
+.help-header,
+.help-footer {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    color: var(--text-dim);
+    font-size: 13px;
+}
+
+.help-header {
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 14px;
+}
+
+.help-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--text);
+    font-size: 18px;
+    font-weight: 800;
+}
+
+.help-logo img {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+}
+
+.help-hero {
+    padding: 44px 0 28px;
+}
+
+.help-hero h1 {
+    margin: 4px 0 8px;
+    font-size: clamp(28px, 6vw, 40px);
+}
+
+.help-hero p:last-child,
+.help-section > p {
+    color: var(--text-dim);
+    line-height: 1.7;
+}
+
+.help-section {
+    margin: 0 0 26px;
+    padding: 22px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+}
+
+.help-section h2 {
+    margin-bottom: 10px;
+    font-size: 20px;
+}
+
+.help-section details {
+    border-top: 1px solid var(--border);
+    padding: 15px 0;
+}
+
+.help-section details:first-of-type {
+    margin-top: 12px;
+}
+
+.help-section summary {
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.help-section details p {
+    margin: 10px 0 0;
+    color: var(--text-dim);
+    font-size: 14px;
+    line-height: 1.8;
+}
+
+.help-doc-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.help-doc-grid a {
+    display: grid;
+    gap: 6px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+
+.help-doc-grid a:hover {
+    background: var(--panel-hover);
+}
+
+.help-doc-grid span,
+.help-policy-note,
+.help-form-note {
+    color: var(--text-dim);
+    font-size: 13px;
+    line-height: 1.7;
+}
+
+.help-policy-note {
+    margin-top: 12px;
+}
+
+.help-contact form {
+    margin-top: 14px;
+}
+
+.help-contact select,
+.help-contact input,
+.help-contact textarea {
+    width: 100%;
+    padding: 12px;
+    border: 0;
+    outline: 1px solid var(--outline);
+    border-radius: 10px;
+    background: var(--panel-hover);
+    color: var(--text);
+    font: inherit;
+}
+
+.help-contact select:focus,
+.help-contact input:focus,
+.help-contact textarea:focus {
+    outline: 2px solid var(--accent);
+}
+
+.help-contact textarea {
+    resize: vertical;
+}
+
+.help-form-note {
+    margin: 12px 0;
+}
+
+.help-form-result {
+    margin: 10px 0;
+    color: var(--accent);
+}
+
+.help-form-result.is-error {
+    color: var(--like);
+}
+
+.help-footer {
+    flex-wrap: wrap;
+    justify-content: center;
+    padding-top: 10px;
+}
+
+.help-footer a:hover,
+.help-header > a:last-child:hover {
+    color: var(--accent);
+}
+
+@media (max-width: 520px) {
+    .help-page {
+        width: min(100% - 24px, 760px);
+    }
+
+    .help-section {
+        padding: 16px;
+    }
+
+    .help-doc-grid {
+        grid-template-columns: 1fr;
+    }
+}

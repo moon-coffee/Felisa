@@ -49,6 +49,15 @@ function renderActions(user) {
     const box = document.getElementById("profile-actions");
     box.innerHTML = "";
 
+    const addReport = () => {
+        const report = makeButton("通報", "btn-outline btn-sm");
+        report.addEventListener("click", async () => {
+            const done = await SNS.reportTarget({ type: "user", id: user.userId });
+            if (done) report.disabled = true;
+        });
+        box.appendChild(report);
+    };
+
     if (user.isMe) {
         const edit = makeButton("プロフィールを編集", "btn-outline");
         edit.addEventListener("click", () => openEdit(user));
@@ -70,6 +79,7 @@ function renderActions(user) {
             loadProfile();
         });
         box.appendChild(un);
+        addReport();
         return;
     }
 
@@ -105,6 +115,7 @@ function renderActions(user) {
         loadProfile();
     });
     box.appendChild(menu);
+    addReport();
 }
 
 async function toggleFollow(btn) {

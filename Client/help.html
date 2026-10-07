@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <base href="/">
+    <style>html,body{background:#252525}</style>
+    <script src="js/theme.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900&display=swap" media="print" data-lazy-css>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.css" media="print" data-lazy-css>
+    <link rel="stylesheet" href="home.css">
+    <link rel="stylesheet" href="help.css">
+    <script defer src="js/defer-css.js"></script>
+    <title>ヘルプセンター | Felisa</title>
+</head>
+<body>
+    <main class="help-page">
+        <header class="help-header">
+            <a href="/home" class="help-logo"><img src="Images/logo.png" alt="">Felisa</a>
+            <a href="/home">アプリへ戻る</a>
+        </header>
+        <section class="help-hero">
+            <p class="settings-eyebrow">FELISA SUPPORT</p>
+            <h1>ヘルプセンター</h1>
+            <p>アカウント、安全、プライバシー、サービスの使い方をご案内します。</p>
+        </section>
+
+        <section class="help-section" aria-labelledby="help-faq-title">
+            <h2 id="help-faq-title">よくある質問</h2>
+            <details>
+                <summary>登録にメールアドレスは必要ですか？</summary>
+                <p>必要ありません。ユーザーIDとパスワードで登録できます。設定からメールアドレスを任意で保存できますが、現在は確認メールやメール送信、メールによるパスワード再設定には対応していません。</p>
+            </details>
+            <details>
+                <summary>投稿やユーザーを通報するには？</summary>
+                <p>ログイン後、ポストの旗アイコンまたはプロフィールの「通報」から理由を選んで送信してください。通報は管理者パネルに記録され、管理者が確認します。確認時間や個別の返信は保証されません。緊急の危険がある場合は、警察などの公的窓口へ直接ご連絡ください。</p>
+            </details>
+            <details>
+                <summary>問い合わせを送ると返信が届きますか？</summary>
+                <p>フォームに入力された内容はサービス内に保存され、管理者パネルで確認できます。自動返信やメール通知はありません。返信が必要な場合は連絡先メールアドレスを入力してください。返信をお約束するものではありません。</p>
+            </details>
+            <details>
+                <summary>投稿はどのように審査されますか？</summary>
+                <p>設定された環境では、本文と投票選択肢がOllama上のLlama Guardで自動判定されます。画像・動画の内容は判定しません。既定では投稿後に判定するため、判定前に表示される場合があります。判定サービスが利用できない場合は投稿を受け付けて後から再確認します。日本語の判定精度には限界があり、すべての違反を検出できるものではありません。詳細はプライバシーポリシーをご確認ください。</p>
+            </details>
+            <details>
+                <summary>アカウントや投稿を削除するとどうなりますか？</summary>
+                <p>設定からアカウントを削除すると、アカウントと関連する投稿などは処理中に削除され、通常は復元できません。アクセスログ等、別の目的で保存される情報は設定された保持期間まで残る場合があります。公開情報の転載先からの削除はできません。</p>
+            </details>
+            <details>
+                <summary>個人情報の開示・訂正などを請求できますか？</summary>
+                <p>プライバシーに関する問い合わせとして下のフォームからご連絡ください。本人確認や請求内容を確認したうえで、適用される法令に従って対応します。</p>
+            </details>
+            <details>
+                <summary>Cookieやテーマ設定は使われますか？</summary>
+                <p>ログイン状態を保つ必須Cookieと、テーマを保存するLocal Storageを使います。広告Cookieは使用していません。フォントとアイコンの表示には外部配信サービスを利用します。詳細はCookieポリシーをご確認ください。</p>
+            </details>
+        </section>
+
+        <section class="help-section" aria-labelledby="help-policy-title">
+            <h2 id="help-policy-title">Important ポリシー・利用規約</h2>
+            <p>本サービスの規約とポリシーの全文です。利用前にご確認ください。</p>
+            <div class="help-doc-grid">
+                <a href="/help/policies/terms"><strong>利用規約</strong><span>アカウント、投稿、禁止事項、通報、サービス利用条件</span></a>
+                <a href="/help/policies/privacy"><strong>プライバシーポリシー</strong><span>取得情報、利用目的、保存、本人からの請求</span></a>
+                <a href="/help/policies/cookies"><strong>Cookieポリシー</strong><span>Cookie・ローカルストレージと外部送信</span></a>
+                <a href="/help/policies/child-safety"><strong>児童安全ポリシー</strong><span>年齢、児童の安全に関する禁止事項と相談先</span></a>
+            </div>
+            <p class="help-policy-note">各リンクはポリシーの原文を表示します。実際の提供方法・運用は、サービスの設定や運営体制によって異なる場合があります。</p>
+        </section>
+
+        <section class="help-section help-contact" id="contact" aria-labelledby="help-contact-title">
+            <h2 id="help-contact-title">お問い合わせ</h2>
+            <p>アカウント、プライバシー、安全、障害などのお問い合わせを送信できます。内容は管理者パネルに保存されます。</p>
+            <form id="help-contact-form">
+                <label class="field"><span>お問い合わせの種類</span>
+                    <select name="category" required>
+                        <option value="">選択してください</option>
+                        <option value="account">アカウント・利用方法</option>
+                        <option value="privacy">プライバシー・個人情報の請求</option>
+                        <option value="safety">安全・権利侵害</option>
+                        <option value="bug">不具合</option>
+                        <option value="other">その他</option>
+                    </select>
+                </label>
+                <label class="field"><span>返信先メールアドレス（任意）</span>
+                    <input type="email" name="email" maxlength="254" autocomplete="email">
+                </label>
+                <label class="field"><span>お問い合わせ内容（4000文字以内）</span>
+                    <textarea name="message" rows="7" maxlength="4000" required></textarea>
+                </label>
+                <p class="help-form-note">このフォームはメールを送信しません。返信先を記入した場合、管理者が手動で連絡することがあります。</p>
+                <div class="help-form-result" id="help-contact-result" role="status" aria-live="polite"></div>
+                <button class="btn btn-solid" type="submit" id="help-contact-submit">送信する</button>
+            </form>
+        </section>
+
+        <footer class="help-footer">
+            <a href="/help/policies/terms">利用規約</a>
+            <a href="/help/policies/privacy">プライバシー</a>
+            <a href="/help/policies/cookies">Cookie</a>
+            <a href="/help/policies/child-safety">児童安全</a>
+            <span>© 2026 Felisa</span>
+        </footer>
+    </main>
+    <script src="js/common.js"></script>
+    <script src="js/help.js"></script>
+</body>
+</html>
